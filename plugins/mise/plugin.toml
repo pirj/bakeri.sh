@@ -1,0 +1,10 @@
+description = "Install language runtimes declared in mise.toml / .tool-versions / .ruby-version / .nvmrc"
+protocol_version = "1"
+deps = []
+host_deps = []
+triggers = ["mise.toml", ".tool-versions", ".ruby-version", ".nvmrc"]
+commands = []
+
+[snapshot]
+strategy = "cached"
+kind = "cold"
