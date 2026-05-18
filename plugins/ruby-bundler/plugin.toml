@@ -1,0 +1,14 @@
+description = "Install Ruby gems declared in Gemfile.lock via Bundler"
+protocol_version = "1"
+deps = ["mise"]
+host_deps = []
+triggers = ["Gemfile.lock"]
+commands = []
+
+[snapshot]
+# incremental: a fresh Gemfile.lock builds on top of the previous run's
+# vendor/bundle, so bundler only downloads/installs the delta. Orphan
+# gems removed from Gemfile.lock stay in vendor/bundle as harmless
+# leftovers; a periodic `cached`-style rebuild is the way to GC them.
+strategy = "incremental"
+kind = "cold"
