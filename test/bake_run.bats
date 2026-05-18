@@ -13,7 +13,7 @@ setup() {
 }
 
 @test "bake-run plugin triggers on bakeri.sh distribution files" {
-    for trig in Dockerfile docker-compose.yml mise.toml .tool-versions .ruby-version .nvmrc; do
+    for trig in Dockerfile docker-compose.yml mise.toml .tool-versions .ruby-version .nvmrc Gemfile.lock package-lock.json; do
         run grep -q "\"$trig\"" "$PLUGIN_DIR/plugin.toml"
         assert_success
     done

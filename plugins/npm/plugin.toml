@@ -1,0 +1,14 @@
+description = "Install Node.js packages declared in package-lock.json via npm ci"
+protocol_version = "1"
+deps = ["mise"]
+host_deps = []
+triggers = ["package-lock.json"]
+commands = []
+
+[snapshot]
+# incremental: leveraging npm's existing node_modules between runs is
+# significantly faster than `npm ci` from scratch. We use `npm install`
+# (not `npm ci`) under incremental because `npm ci` deletes
+# node_modules first and would defeat the cache layering.
+strategy = "incremental"
+kind = "cold"

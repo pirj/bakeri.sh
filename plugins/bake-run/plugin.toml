@@ -14,5 +14,8 @@ triggers = [
     ".tool-versions",
     ".ruby-version",
     ".nvmrc",
+    ".node-version",
+    "Gemfile.lock",
+    "package-lock.json",
 ]
 commands = ["bake-run"]
