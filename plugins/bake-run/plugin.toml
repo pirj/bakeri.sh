@@ -1,0 +1,18 @@
+description = "One-shot job runner: provision (or reuse) the project VM and exec a command in /repo"
+protocol_version = "1"
+deps = []
+host_deps = []
+# Activate alongside any other bakeri.sh plugin that has a trigger in the
+# project. The union of triggers below matches the rest of the
+# distribution; bake-run is only useful where there's actually something
+# to bake.
+triggers = [
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "mise.toml",
+    ".tool-versions",
+    ".ruby-version",
+    ".nvmrc",
+]
+commands = ["bake-run"]
