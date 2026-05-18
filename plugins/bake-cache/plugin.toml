@@ -1,0 +1,19 @@
+description = "Inspect bakeri.sh's layered snapshot cache: per-plugin entries, sizes, kinds"
+protocol_version = "1"
+deps = []
+host_deps = []
+# Activate alongside the rest of the bakeri.sh distribution so the
+# command is available wherever bake-run is.
+triggers = [
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "mise.toml",
+    ".tool-versions",
+    ".ruby-version",
+    ".nvmrc",
+    ".node-version",
+    "Gemfile.lock",
+    "package-lock.json",
+]
+commands = ["bake-cache"]
