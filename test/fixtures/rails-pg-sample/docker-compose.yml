@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    environment:
+      POSTGRES_PASSWORD: pass
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy

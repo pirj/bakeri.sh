@@ -1,0 +1,9 @@
+description = "Install Docker daemon inside the VM"
+protocol_version = "1"
+deps = []
+host_deps = []
+triggers = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
+commands = []
+
+[snapshot]
+strategy = "cached"
