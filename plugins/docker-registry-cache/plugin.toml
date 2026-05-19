@@ -1,0 +1,10 @@
+description = "Host-side Docker registry pull-through cache (avoids re-pull on second project)"
+protocol_version = "1"
+deps = ["docker-engine"]
+host_deps = ["registry"]
+triggers = []
+commands = []
+
+[snapshot]
+strategy = "cached"
+kind = "cold"

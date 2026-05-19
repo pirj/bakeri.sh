@@ -7,10 +7,13 @@ setup() {
     cd "$BATS_TEST_TMPDIR"
 }
 
-@test "docker-compose plugin declares cached live snapshot with 4G memory + deps on docker-engine" {
+@test "docker-compose plugin declares cached live snapshot with 4G memory + deps on docker-registry-cache" {
     run grep -q '^\[snapshot\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
-    run grep -q 'deps *= *\["docker-engine"\]' "$PLUGIN_DIR/plugin.toml"
+    # docker-registry-cache transitively depends on docker-engine, so this
+    # both pulls the engine in AND ensures the host-side mirror is set up
+    # before `docker compose pull` runs.
+    run grep -q 'deps *= *\["docker-registry-cache"\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
     run grep -q 'strategy *= *"cached"' "$PLUGIN_DIR/plugin.toml"
     assert_success

@@ -1,6 +1,6 @@
 description = "Build and warm up docker-compose services inside the VM"
 protocol_version = "1"
-deps = ["docker-engine"]
+deps = ["docker-registry-cache"]
 host_deps = []
 triggers = ["docker-compose.yml", "docker-compose.yaml"]
 commands = []
