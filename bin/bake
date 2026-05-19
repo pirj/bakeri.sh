@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# bake — thin wrapper around `rl bake-<subcommand>` for the bakeri.sh
+# distribution. Lets users type `bake run`, `bake pr`, `bake cache`
+# instead of the longer `rl bake-run`, `rl bake-pr`, `rl bake-cache`.
+#
+# Examples:
+#   bake run -- npm test
+#   bake pr --cmd 'rake test' https://github.com/o/r/pull/1
+#   bake cache
+#   bake cache --rm ruby-bundler
+
+set -eu
+
+usage() {
+    cat <<EOF
+Usage: bake <subcommand> [args...]
+
+Subcommands:
+  run [--no-push] -- <command>         run a command in the project VM
+  pr  --cmd '<command>' <pr-ref>       run a GitHub PR in isolation
+  cache                                list cached snapshot layers
+  cache --rm <plugin>[:<key>]          drop cache entries
+  cache --rebuild <plugin>             drop plugin + descendants
+
+Pass --help to any subcommand for details (where implemented).
+EOF
+}
+
+if [ $# -eq 0 ]; then
+    usage
+    exit 2
+fi
+
+sub="$1"; shift
+
+case "$sub" in
+    help|--help|-h) usage; exit 0 ;;
+esac
+
+# Each subcommand maps to `rl bake-<sub>`. `rl` lives on PATH (rlock
+# checkout's bin/ added by the user).
+if ! command -v rl >/dev/null 2>&1; then
+    echo "Error: 'rl' not on PATH. Install rlock (https://github.com/pirj/rlock) and add its bin/ to PATH." >&2
+    exit 1
+fi
+
+exec rl "bake-$sub" "$@"

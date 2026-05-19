@@ -21,17 +21,27 @@ Planned (see `docs/superpowers/plans/`):
 
 ## Install
 
-bakeri.sh is a plugin pack: it provides plugins for the rlock framework. Clone both side by side, then point `rl` at this distribution's plugins:
+bakeri.sh is a plugin pack: it provides plugins for the rlock framework. Clone both side by side, then add both `bin/` dirs to `PATH`:
 
 ```sh
 git clone git@github.com:pirj/rlock.git
 git clone git@github.com:pirj/bakeri.sh.git
-export PATH="$PWD/rlock/bin:$PATH"
+export PATH="$PWD/rlock/bin:$PWD/bakeri.sh/bin:$PATH"
 export PLUGIN_USER_DIR="$PWD/bakeri.sh/plugins"
 
 cd your-project   # has Dockerfile / docker-compose.yml
-rl new
+rl new            # provisions the VM, walking the cache chain
+bake run -- rake test
 ```
+
+`bake` is a thin wrapper around `rl bake-<sub>` for the friendlier UX:
+
+| Friendly form           | Equivalent                              |
+|-------------------------|-----------------------------------------|
+| `bake run -- <cmd>`     | `rl bake-run -- <cmd>`                  |
+| `bake pr --cmd '<cmd>' <pr-url>` | `rl bake-pr --cmd '<cmd>' <pr-url>` |
+| `bake cache`            | `rl bake-cache`                         |
+| `bake cache --rm <plugin>` | `rl bake-cache --rm <plugin>`         |
 
 For full Docker functionality, `aq` (the underlying VM engine) needs enough RAM. The current `aq -m 1G` default is too tight for most compose stacks. Roadmap item: `aq --memory=NG` flag, after which bakeri.sh plugins can declare `kind = "live"` for sub-second restore. Until then, expect cold restarts on warm-layer cache hits.
 
