@@ -77,3 +77,16 @@ L
     k2=$(RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_key)
     [ "$k1" = "$k2" ]
 }
+
+@test "ruby-bundler snapshot_should_skip prints 'skip' when no Gemfile.lock" {
+    run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+    assert_success
+    assert_output "skip"
+}
+
+@test "ruby-bundler snapshot_should_skip stays silent when Gemfile.lock exists" {
+    echo "GEM" > Gemfile.lock
+    run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+    assert_success
+    refute_output "skip"
+}

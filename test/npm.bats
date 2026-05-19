@@ -56,3 +56,16 @@ setup() {
     k2=$(RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_key)
     [ "$k1" = "$k2" ]
 }
+
+@test "npm snapshot_should_skip prints 'skip' when no package-lock.json" {
+    run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+    assert_success
+    assert_output "skip"
+}
+
+@test "npm snapshot_should_skip stays silent when package-lock.json exists" {
+    echo '{}' > package-lock.json
+    run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+    assert_success
+    refute_output "skip"
+}

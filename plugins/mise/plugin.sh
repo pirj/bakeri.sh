@@ -2,6 +2,16 @@
 set -euo pipefail
 source "${RL_LIB_DIR}/ui.sh"
 
+# Tell the framework to skip this iteration when no tool-version files
+# exist in the project root. Saves the ~5-7 s rebase+boot+stop cycle the
+# framework would otherwise spend wrapping a no-op snapshot_build.
+snapshot_should_skip() {
+    if [ ! -f mise.toml ] && [ ! -f .tool-versions ] \
+       && [ ! -f .ruby-version ] && [ ! -f .nvmrc ]; then
+        echo "skip"
+    fi
+}
+
 # Snapshot key = hash of all tool-version-declaring files in the project root.
 # Any of these missing = no contribution to the hash. The `|| true` keeps a
 # missing file from tripping the surrounding `set -e`.

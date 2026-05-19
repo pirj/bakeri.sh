@@ -2,6 +2,13 @@
 set -euo pipefail
 source "${RL_LIB_DIR}/ui.sh"
 
+# Skip this layer entirely when there's no Gemfile.lock — saves ~5-7 s
+# of rebase+boot+stop cycle the framework would otherwise run around a
+# no-op snapshot_build.
+snapshot_should_skip() {
+    [ -f Gemfile.lock ] || echo "skip"
+}
+
 # Snapshot key = SHA256 of Gemfile.lock plus version markers that affect
 # what bundler installs (Ruby version, bundler version). `|| true` keeps
 # missing optional files from tripping the surrounding `set -e`.

@@ -83,3 +83,26 @@ nodejs 22" > .tool-versions
     k2=$(RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_key)
     [ "$k1" = "$k2" ]
 }
+
+@test "mise snapshot_should_skip prints 'skip' when no tool-version files" {
+    run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+    assert_success
+    assert_output "skip"
+}
+
+@test "mise snapshot_should_skip stays silent when mise.toml exists" {
+    echo "[tools]" > mise.toml
+    run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+    assert_success
+    refute_output "skip"
+}
+
+@test "mise snapshot_should_skip stays silent for any single trigger file" {
+    for trig in .tool-versions .ruby-version .nvmrc; do
+        rm -f mise.toml .tool-versions .ruby-version .nvmrc
+        echo "x" > "$trig"
+        run env RL_LIB_DIR="$LIB_DIR" bash "$PLUGIN_DIR/plugin.sh" snapshot_should_skip
+        assert_success
+        refute_output "skip"
+    done
+}

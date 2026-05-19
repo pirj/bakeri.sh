@@ -2,6 +2,12 @@
 set -euo pipefail
 source "${RL_LIB_DIR}/ui.sh"
 
+# Skip this layer when there's no package-lock.json — saves ~5-7 s of
+# rebase+boot+stop cycle around a no-op snapshot_build.
+snapshot_should_skip() {
+    [ -f package-lock.json ] || echo "skip"
+}
+
 # Snapshot key = SHA256 of package-lock.json plus the Node version
 # markers that affect what npm installs.
 snapshot_key() {
