@@ -78,3 +78,56 @@ M
     assert_success
     assert_output --partial "Last prune: Pruned 3"
 }
+
+@test "bake-cache --rm <plugin> drops every entry for that plugin" {
+    mkdir -p "$CACHE_DIR/ruby-bundler/k1" "$CACHE_DIR/ruby-bundler/k2" "$CACHE_DIR/npm/k1"
+    touch "$CACHE_DIR/ruby-bundler/k1/disk.qcow2" \
+          "$CACHE_DIR/ruby-bundler/k2/disk.qcow2" \
+          "$CACHE_DIR/npm/k1/disk.qcow2"
+
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --rm ruby-bundler
+    assert_success
+    [ ! -d "$CACHE_DIR/ruby-bundler" ]
+    [ -f "$CACHE_DIR/npm/k1/disk.qcow2" ]
+}
+
+@test "bake-cache --rm <plugin>:<key> drops one entry only" {
+    mkdir -p "$CACHE_DIR/ruby-bundler/k1" "$CACHE_DIR/ruby-bundler/k2"
+    touch "$CACHE_DIR/ruby-bundler/k1/disk.qcow2" \
+          "$CACHE_DIR/ruby-bundler/k2/disk.qcow2"
+
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --rm ruby-bundler:k1
+    assert_success
+    [ ! -d "$CACHE_DIR/ruby-bundler/k1" ]
+    [ -f "$CACHE_DIR/ruby-bundler/k2/disk.qcow2" ]
+}
+
+@test "bake-cache --rm reports no-op for unknown plugin" {
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --rm never-existed
+    assert_success
+    assert_output --partial "No cache entries"
+}
+
+@test "bake-cache --rebuild drops plugin + descendants" {
+    # docker-compose has parent_plugin = docker-engine in its meta.json,
+    # so --rebuild docker-engine should also drop docker-compose entries.
+    mkdir -p "$CACHE_DIR/docker-engine/de_k1" "$CACHE_DIR/docker-compose/dc_k1" "$CACHE_DIR/unrelated/u_k1"
+    touch "$CACHE_DIR/docker-engine/de_k1/disk.qcow2" \
+          "$CACHE_DIR/docker-compose/dc_k1/disk.qcow2" \
+          "$CACHE_DIR/unrelated/u_k1/disk.qcow2"
+    cat > "$CACHE_DIR/docker-engine/de_k1/meta.json" <<'M'
+{ "plugin": "docker-engine", "parent_plugin": "" }
+M
+    cat > "$CACHE_DIR/docker-compose/dc_k1/meta.json" <<'M'
+{ "plugin": "docker-compose", "parent_plugin": "docker-engine" }
+M
+    cat > "$CACHE_DIR/unrelated/u_k1/meta.json" <<'M'
+{ "plugin": "unrelated", "parent_plugin": "" }
+M
+
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --rebuild docker-engine
+    assert_success
+    [ ! -d "$CACHE_DIR/docker-engine" ]
+    [ ! -d "$CACHE_DIR/docker-compose/dc_k1" ]
+    [ -f "$CACHE_DIR/unrelated/u_k1/disk.qcow2" ]
+}

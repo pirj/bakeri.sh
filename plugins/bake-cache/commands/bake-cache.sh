@@ -1,19 +1,104 @@
 #!/usr/bin/env bash
 #
-# bake-cache — show what bakeri.sh's snapshot framework has cached.
+# bake-cache — manage bakeri.sh's snapshot framework cache.
 #
-# Output is a table: plugin, key (truncated), kind, size, last-modified.
+# Usage:
+#   rl bake-cache                       # list all cached entries (default)
+#   rl bake-cache --rm <plugin>         # remove every entry for a plugin
+#   rl bake-cache --rm <plugin>:<key>   # remove one specific entry
+#   rl bake-cache --rebuild <plugin>    # drop every entry for plugin + all
+#                                       # descendants (whose parent_plugin
+#                                       # is <plugin>); next `rl new` rebuilds.
+#
+# List output is a table: plugin, key (truncated), kind, size, last-modified.
 # Cold entries report disk.qcow2 size. Live entries also include
 # memory.bin alongside the disk.
-#
-# Future subcommands (not implemented yet): `--rm <plugin>[:<key>]`,
-# `--rebuild <plugin>`.
 
 set -euo pipefail
 source "${RL_LIB_DIR}/ui.sh"
 
 CACHE_DIR="${RL_CACHE_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aq/cache}"
 
+# --- subcommand: --rm ------------------------------------------------------
+do_rm() {
+    local target="$1"
+    local plugin="${target%%:*}"
+    local key=""
+    if [[ "$target" == *:* ]]; then
+        key="${target#*:}"
+    fi
+    [[ -n "$plugin" ]] || { stderr "Usage: rl bake-cache --rm <plugin>[:<key>]"; exit 2; }
+
+    local plugin_dir="$CACHE_DIR/$plugin"
+    if [[ ! -d "$plugin_dir" ]]; then
+        info "No cache entries for plugin '$plugin'."
+        return 0
+    fi
+
+    if [[ -n "$key" ]]; then
+        local entry="$plugin_dir/$key"
+        if [[ ! -d "$entry" ]]; then
+            info "No entry '$plugin:$key' in cache."
+            return 0
+        fi
+        rm -rf "$entry"
+        # Drop empty plugin dir.
+        rmdir "$plugin_dir" 2>/dev/null || true
+        info "Removed $plugin:$key"
+    else
+        local count
+        count=$(find "$plugin_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d '[:space:]')
+        rm -rf "$plugin_dir"
+        info "Removed $count entries for plugin '$plugin'"
+    fi
+}
+
+# --- subcommand: --rebuild -------------------------------------------------
+# Drop a plugin's entries AND any entry whose meta.json names it as
+# parent_plugin (one level deep). This avoids the dangling-ancestor
+# problem where a descendant cache hit points at a no-longer-existing
+# parent snapshot.
+do_rebuild() {
+    local plugin="$1"
+    [[ -n "$plugin" ]] || { stderr "Usage: rl bake-cache --rebuild <plugin>"; exit 2; }
+
+    if [[ ! -d "$CACHE_DIR/$plugin" ]]; then
+        info "No cache entries for plugin '$plugin'."
+        return 0
+    fi
+
+    # Collect descendants first (before removing the target).
+    local -a descendants=()
+    local meta
+    while IFS= read -r meta; do
+        [[ -f "$meta" ]] || continue
+        local parent
+        parent=$(grep -E '"parent_plugin":' "$meta" 2>/dev/null \
+            | sed -E 's/.*"parent_plugin": "([^"]*)".*/\1/' | head -1)
+        if [[ "$parent" == "$plugin" ]]; then
+            descendants+=("$(dirname "$meta")")
+        fi
+    done < <(find "$CACHE_DIR" -name meta.json -type f 2>/dev/null)
+
+    rm -rf "$CACHE_DIR/$plugin"
+    info "Removed entries for plugin '$plugin'"
+
+    local d
+    for d in "${descendants[@]}"; do
+        rm -rf "$d"
+        info "Removed descendant: $(basename "$(dirname "$d")"):$(basename "$d")"
+    done
+}
+
+# --- arg parse -------------------------------------------------------------
+case "${1:-}" in
+    --rm)        shift; do_rm      "${1:-}"; exit 0 ;;
+    --rm=*)      do_rm      "${1#--rm=}"; exit 0 ;;
+    --rebuild)   shift; do_rebuild "${1:-}"; exit 0 ;;
+    --rebuild=*) do_rebuild "${1#--rebuild=}"; exit 0 ;;
+esac
+
+# Default: list.
 if [[ ! -d "$CACHE_DIR" ]]; then
     info "Cache empty (no entries at $CACHE_DIR)"
     exit 0
