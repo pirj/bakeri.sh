@@ -70,6 +70,39 @@ off the same cached snapshot. Measurement TODO: how much disk does
 this single snapshot occupy and how much time does it save versus a
 cold install? (~30 s install, ~470 MiB snapshot — confirm.)
 
+## Consolidate `bake-run` / `bake-pr` / `bake-cache` into one `bake-cli` plugin
+
+Surfaced by the 2026-05-19 architecture review (Issue 1) — see
+[`architecture-review-2026-05-19.md`](../architecture-review-2026-05-19.md).
+
+Today, each of the three command-only plugins declares the same 10-entry
+trigger list (Dockerfile, docker-compose.\*, mise.toml, .tool-versions,
+.ruby-version, .nvmrc, .node-version, Gemfile.lock, package-lock.json) —
+the union of distribution-relevant files. Adding a new dep installer
+(uv, pnpm, poetry, ...) requires updating its triggers AND all three
+bake-\* plugins. Triplication invites drift.
+
+Fix: collapse into a single `bake-cli` plugin:
+
+```
+plugins/bake-cli/
+  plugin.toml              # commands = ["bake-run", "bake-pr", "bake-cache"]
+                           # trigger list (single source of truth)
+  commands/
+    bake-run.sh            # moved from plugins/bake-run/commands/
+    bake-pr.sh             # moved from plugins/bake-pr/commands/
+    bake-cache.sh          # moved from plugins/bake-cache/commands/
+```
+
+Framework already supports multiple `commands = [...]` per plugin (used
+by `auth-proxy` declaring `auth`, `branch` declaring `branch`, etc.).
+The command scripts don't change; just the directory layout + the three
+old `plugin.toml` files merge into one.
+
+Tests: rename test files (`bake_run.bats` -> `bake_cli_run.bats` or
+keep names), update `PLUGIN_DIR` to point at `plugins/bake-cli`. Net
+test count unchanged.
+
 ## Open design questions
 
 - **PR-from-untrusted-fork model.** Two options:
