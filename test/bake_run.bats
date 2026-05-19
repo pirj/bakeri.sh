@@ -12,11 +12,12 @@ setup() {
     assert_success
 }
 
-@test "bake-run plugin triggers on bakeri.sh distribution files" {
-    for trig in Dockerfile docker-compose.yml mise.toml .tool-versions .ruby-version .nvmrc Gemfile.lock package-lock.json; do
-        run grep -q "\"$trig\"" "$PLUGIN_DIR/plugin.toml"
-        assert_success
-    done
+@test "bake-run plugin is command-only (no triggers, no [snapshot])" {
+    # The framework's dispatch_command falls back to all discoverable
+    # plugins for command lookup, so bake-run doesn't need triggers to
+    # appear in ACTIVE_PLUGINS.
+    run grep -q '^triggers *= *\[\]$' "$PLUGIN_DIR/plugin.toml"
+    assert_success
 }
 
 @test "bake-run plugin has no [snapshot] section (command-only)" {

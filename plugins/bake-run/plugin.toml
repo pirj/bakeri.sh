@@ -2,20 +2,9 @@ description = "One-shot job runner: provision (or reuse) the project VM and exec
 protocol_version = "1"
 deps = []
 host_deps = []
-# Activate alongside any other bakeri.sh plugin that has a trigger in the
-# project. The union of triggers below matches the rest of the
-# distribution; bake-run is only useful where there's actually something
-# to bake.
-triggers = [
-    "Dockerfile",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    "mise.toml",
-    ".tool-versions",
-    ".ruby-version",
-    ".nvmrc",
-    ".node-version",
-    "Gemfile.lock",
-    "package-lock.json",
-]
+# No triggers — this is a command-only plugin. The rlock framework's
+# dispatch_command falls back to all discoverable plugins when looking
+# for a command, so `rl bake-run` works without bake-run needing to
+# appear in ACTIVE_PLUGINS via a file trigger.
+triggers = []
 commands = ["bake-run"]
