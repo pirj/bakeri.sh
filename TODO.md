@@ -103,40 +103,7 @@ Tests: rename test files (`bake_run.bats` -> `bake_cli_run.bats` or
 keep names), update `PLUGIN_DIR` to point at `plugins/bake-cli`. Net
 test count unchanged.
 
-## Pre-warmed docker image cache on host
-
-Surfaced by the 2026-05-19 e2e benchmark (see
-[`../benchmark-2026-05-19.md`](../benchmark-2026-05-19.md)): cold path
-spends ~60 s on `docker compose pull` (postgres:16-alpine + ruby:3.2-
-alpine etc.) the first time each project asks for a given image.
-Subsequent projects on the same host pay the same network cost again
-because the pull happens INSIDE the guest VM — host's docker daemon
-has no shared cache, and bakeri.sh's docker-compose layer's
-`snapshot_key` is per-project (Dockerfile + compose YAML hash), so
-the saved snapshot doesn't help a different project.
-
-Implementation candidates:
-
-- Host-side registry mirror (Caddy or registry:2) caching docker.io
-  responses. bakeri.sh's docker-engine layer configures `/etc/docker/
-  daemon.json` `registry-mirrors` to point at host (10.0.2.2:5000).
-  First project pays full pull; every subsequent project gets cache
-  hits at LAN speed.
-- Pre-seeded `/var/lib/docker` shared via virtio-9p mount. More
-  invasive (Docker storage drivers + concurrent-access concerns).
-  Avoid.
-- Treat docker-engine as a side-effect-producing layer that also
-  pre-pulls a configurable set of "warmth" images. Bigger snapshot,
-  faster first cold; works only if the image set matches the
-  project. Not generic enough.
-
-Recommend option 1 (registry mirror). Touches docker-engine plugin
-(config) + introduces a host service that bakeri.sh manages. Closest
-analogue: ai.rlock's auth-proxy plugin model (Caddy on host doing
-header injection). Could share the Caddy host-service infrastructure.
-
-Tracked here because docker is bakeri.sh-specific; ai.rlock has no
-need for a docker registry mirror.
+[done 2026-05-19, commit 29a75fd] Pre-warmed docker image cache on host. Shipped as `docker-registry-cache` plugin: CNCF distribution binary in proxy mode on 127.0.0.1:5000; guest dockerd configured via daemon.json `registry-mirrors` to 10.0.2.2:5000. ~60 s saved off every cold rl new after the first on the host. host_deps = ["registry"] (brew install docker-distribution-distribution on macOS).
 
 ## Open design questions
 
