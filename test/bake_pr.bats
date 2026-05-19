@@ -25,8 +25,8 @@ STUB
     assert_success
 }
 
-@test "bake-pr plugin requires gh + git host deps" {
-    run grep -q 'host_deps *= *\["gh", "git"\]' "$PLUGIN_DIR/plugin.toml"
+@test "bake-pr plugin declares git as the only unconditional host dep" {
+    run grep -q 'host_deps *= *\["git"\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
 
@@ -71,4 +71,48 @@ GH
     assert_failure 1
     assert_output --partial "STUB GH FAILED"
     refute_output --partial "--cmd is required"
+}
+
+@test "bake-pr rejects unrecognised ref without --no-isolation" {
+    run env RL_LIB_DIR="$STUB_LIB" bash "$CMD" --cmd 'echo hi' my-branch
+    assert_failure 2
+    assert_output --partial "not a recognised GitHub/GitLab PR URL"
+    assert_output --partial "--no-isolation"
+}
+
+@test "bake-pr routes gitlab URL to glab (runtime-checked)" {
+    # No glab on PATH — script must fail with the platform-specific
+    # install hint, NOT with a github-specific one.
+    PATH="$BATS_TEST_TMPDIR/empty-bin:$PATH" \
+    run env RL_LIB_DIR="$STUB_LIB" bash "$CMD" --cmd 'echo hi' \
+        https://gitlab.com/owner/repo/-/merge_requests/3
+    assert_failure 1
+    assert_output --partial "glab CLI not installed"
+    refute_output --partial "gh CLI not installed"
+}
+
+@test "bake-pr --no-isolation skips PR resolution entirely" {
+    # Build a tiny local git repo so `git rev-parse HEAD` resolves, and
+    # configure an `rl` remote that just sinks pushes (a local bare repo).
+    local sink="$BATS_TEST_TMPDIR/sink.git"
+    git init --bare -q "$sink"
+    local proj="$BATS_TEST_TMPDIR/proj"
+    git init -q "$proj"
+    cd "$proj"
+    git -c user.email=a@b -c user.name=a commit --allow-empty -m init -q
+    git remote add rl "$sink"
+
+    # AQ_STATE_DIR must contain a dir matching the VM name (the script
+    # checks existence). resolve_vm_name in the stub returns "stub-vm".
+    local aq_state="$BATS_TEST_TMPDIR/aq_state"
+    mkdir -p "$aq_state/stub-vm"
+
+    AQ_STATE_DIR="$aq_state" run env RL_LIB_DIR="$STUB_LIB" \
+        bash "$CMD" --cmd 'echo hi' --no-isolation HEAD
+    assert_success
+    # do_ssh stub echoes its args — verify we got there.
+    assert_output --partial "DOSSH:stub-vm"
+    # And verify the sink received the push under the expected ref.
+    run git --git-dir="$sink" rev-parse refs/heads/_bake_pr
+    assert_success
 }
