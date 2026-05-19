@@ -1,0 +1,13 @@
+description = "Install Python packages declared in uv.lock via uv sync"
+protocol_version = "1"
+deps = ["mise"]
+host_deps = []
+triggers = ["uv.lock"]
+commands = []
+
+[snapshot]
+# incremental: uv's global cache (~/.cache/uv) and the project's .venv
+# from the previous layer survive across builds, so `uv sync` only
+# resolves / fetches / links the delta when the lockfile changes.
+strategy = "incremental"
+kind = "cold"

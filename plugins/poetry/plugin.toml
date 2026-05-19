@@ -1,0 +1,13 @@
+description = "Install Python packages declared in poetry.lock via poetry install"
+protocol_version = "1"
+deps = ["mise"]
+host_deps = []
+triggers = ["poetry.lock"]
+commands = []
+
+[snapshot]
+# incremental: poetry's project-local .venv from the previous layer
+# survives across builds, so `poetry install` only fetches / links the
+# delta when the lockfile changes.
+strategy = "incremental"
+kind = "cold"

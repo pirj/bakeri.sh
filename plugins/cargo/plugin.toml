@@ -1,0 +1,15 @@
+description = "Fetch Rust crates declared in Cargo.lock via cargo fetch (no compile)"
+protocol_version = "1"
+deps = ["mise"]
+host_deps = []
+triggers = ["Cargo.lock"]
+commands = []
+
+[snapshot]
+# incremental: cargo's registry / git checkouts in ~/.cargo and the
+# project's target/ dir survive across builds, so `cargo fetch` only
+# pulls the delta. The plugin intentionally stops at `fetch` (not
+# `build`) — target/ contents depend on profile + features and users
+# usually drive compilation themselves from `bake run`.
+strategy = "incremental"
+kind = "cold"

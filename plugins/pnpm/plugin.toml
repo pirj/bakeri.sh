@@ -1,0 +1,14 @@
+description = "Install Node.js packages declared in pnpm-lock.yaml via pnpm install"
+protocol_version = "1"
+deps = ["mise"]
+host_deps = []
+triggers = ["pnpm-lock.yaml"]
+commands = []
+
+[snapshot]
+# incremental: pnpm's content-addressable store (~/.local/share/pnpm/store)
+# and project-local node_modules from the previous layer survive into this
+# build, so `pnpm install` only fetches/links the delta. A fresh cold
+# rebuild would re-resolve every package.
+strategy = "incremental"
+kind = "cold"
