@@ -1,0 +1,17 @@
+description = "Run a GitHub PR (including from untrusted forks) in the project's VM"
+protocol_version = "1"
+deps = []
+host_deps = ["gh", "git"]
+triggers = [
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "mise.toml",
+    ".tool-versions",
+    ".ruby-version",
+    ".nvmrc",
+    ".node-version",
+    "Gemfile.lock",
+    "package-lock.json",
+]
+commands = ["bake-pr"]
