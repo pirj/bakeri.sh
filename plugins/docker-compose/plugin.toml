@@ -1,6 +1,13 @@
 description = "Build and warm up docker-compose services inside the VM"
 protocol_version = "1"
-deps = ["docker-registry-cache"]
+# Hard dep on `docker-engine` only (we need dockerd inside the VM).
+# `docker-registry-cache` was previously listed here too, but the cache
+# is a pure-optimisation layer — without it, guests pull straight from
+# docker.io (slower first cold; warm path unaffected). Forcing the host
+# `registry` binary on every bakeri.sh user is too strong a price for
+# one optimisation. Users who want it: add `docker-registry-cache`
+# explicitly on the `rl new` command line.
+deps = ["docker-engine"]
 host_deps = []
 triggers = ["docker-compose.yml", "docker-compose.yaml"]
 commands = []

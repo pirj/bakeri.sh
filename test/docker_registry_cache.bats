@@ -23,7 +23,7 @@ setup() {
     assert_success
 }
 
-@test "plugin has no triggers (activated only as a dep of docker-compose)" {
+@test "plugin has no triggers (opt-in only — listed explicitly on rl new)" {
     run grep -q '^triggers *= *\[\]$' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
@@ -71,7 +71,11 @@ setup() {
     [ "$k1" = "$k2" ]
 }
 
-@test "docker-compose plugin deps on docker-registry-cache (mirror runs before compose pull)" {
-    run grep -q 'deps *= *\["docker-registry-cache"\]' "$PROJECT_ROOT/plugins/docker-compose/plugin.toml"
+@test "docker-registry-cache plugin transitively depends on docker-engine" {
+    # docker-compose intentionally does NOT depend on docker-registry-cache —
+    # the mirror is an opt-in optimisation, not a correctness requirement.
+    # docker-registry-cache itself still depends on docker-engine because
+    # configuring /etc/docker/daemon.json requires dockerd to exist first.
+    run grep -q 'deps *= *\["docker-engine"\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
