@@ -7,3 +7,14 @@ commands = []
 
 [snapshot]
 strategy = "cached"
+# Live: the warm compose stack — running services, postgres connection
+# pool, page cache, redis state — is the highest-value layer to capture
+# in memory. Restoring resumes the running guest mid-flight, skipping
+# `compose up` + healthcheck wait entirely. Without kind = "live" this
+# layer's "cache hit" still requires `compose up` to be replayed.
+kind = "live"
+# At least 4G of guest RAM. Docker daemon + a couple of service containers
+# easily exceeds 1G, and live snapshots bind the captured size — too
+# little here and Postgres / Redis page cache won't fit. The framework
+# collects this across active plugins and passes max() to aq new --memory.
+memory = "4G"

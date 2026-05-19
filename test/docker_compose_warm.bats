@@ -7,10 +7,16 @@ setup() {
     cd "$BATS_TEST_TMPDIR"
 }
 
-@test "docker-compose plugin declares cached snapshot + deps on docker-engine" {
+@test "docker-compose plugin declares cached live snapshot with 4G memory + deps on docker-engine" {
     run grep -q '^\[snapshot\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
     run grep -q 'deps *= *\["docker-engine"\]' "$PLUGIN_DIR/plugin.toml"
+    assert_success
+    run grep -q 'strategy *= *"cached"' "$PLUGIN_DIR/plugin.toml"
+    assert_success
+    run grep -q 'kind *= *"live"' "$PLUGIN_DIR/plugin.toml"
+    assert_success
+    run grep -q 'memory *= *"4G"' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
 
