@@ -15,8 +15,12 @@ items (framework, aq, AI plugins) live in the corresponding repo's TODO.
 - **`npm`** — `deps = ["mise"]`, `triggers = ["package-lock.json"]`,
   `strategy = "incremental"`, `kind = "cold"`. `snapshot_build` runs
   `npm ci`.
-- **`uv`** / **`poetry`** / **`pnpm`** — analogous patterns for
-  python / pnpm respectively.
+- [done 2026-05-19, commit 314476f] **`uv`** / **`poetry`** / **`pnpm`** /
+  **`cargo`** — dep-installer plugins mirroring the npm / ruby-bundler
+  shape (incremental cold, deps on mise). Each scp's its lockfile +
+  manifest into /home/rlock/repo, then runs the install command via
+  mise-managed or apk-fallback tooling. `cargo` stops at `cargo fetch`
+  (target/ build is the user's call).
 - **`rails-db-migrations`** — `deps = ["docker-compose", "ruby-bundler"]`,
   `strategy = "ephemeral"` (cheap to rerun, frequently changes).
 - **`rails-db-seeds`** — `deps = ["rails-db-migrations"]`,
