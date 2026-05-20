@@ -4,6 +4,33 @@ This file tracks distribution-level work — plugins, commands, and design
 choices specific to the CI / pre-baked-environment use case. Cross-cutting
 items (framework, aq, AI plugins) live in the corresponding repo's TODO.
 
+## North-star: GitHub Actions CI integration
+
+bakeri.sh is primarily a CI runner. Local PR isolation is a side use case
+deferred to a future separate tool (working title `p.rlock`). Anything
+below is scored against "does this make GH Actions CI faster / easier".
+
+- [ ] **Cross-machine snapshot transport via `actions/cache`**. The
+  layer cache must survive between CI runs. MVP: GH Actions native
+  `actions/cache@v4` keyed by `hashFiles('bakerish.toml', '<lockfiles>',
+  ...)`. Free, no setup, ~10 GB / 7-day retention limits. The cache
+  dir is `~/.local/share/aq/cache/` — restore/save it, every other
+  bake-run on the runner is sub-second warm.
+- [ ] **`bakeri.sh/.github/workflows/example-bakerish-ci.yml`** — the
+  reference setup users copy-paste from. Shows: prereq install (qemu,
+  aq, rlock, bakeri.sh), actions/cache restore, `bake run -- <cmd>`,
+  actions/cache save.
+- [ ] **Packaged action `pirj/setup-bakerish@v1`** — encapsulates the
+  prereq install + cache choreography. Cleaner UX than the snippet
+  once usage patterns settle. Ship after the example workflow has a
+  few real consumers.
+- [ ] **OCI registry cache transport** as alt-to-actions/cache for
+  cross-repo / unlimited-size needs. Mirrors depot.dev's approach.
+  Roadmap item; not blocking the MVP.
+
+Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
+(prebuild) and a future GH-CI-specific spec doc.
+
 ## Plugins to add
 
 - **`mise`** — tool-version manager. `triggers = ["mise.toml", ".tool-versions"]`.
@@ -21,19 +48,79 @@ items (framework, aq, AI plugins) live in the corresponding repo's TODO.
   manifest into /home/rlock/repo, then runs the install command via
   mise-managed or apk-fallback tooling. `cargo` stops at `cargo fetch`
   (target/ build is the user's call).
-- **`rails-db-migrations`** — `deps = ["docker-compose", "ruby-bundler"]`,
-  `strategy = "ephemeral"` (cheap to rerun, frequently changes).
-- **`rails-db-seeds`** — `deps = ["rails-db-migrations"]`,
-  `strategy = "ephemeral"`.
-- **`rails-load-db-schema`** — `deps = ["docker-compose", "ruby-bundler"]`,
-  `strategy = "cached"` (schema.rb changes are rarer than migrations).
+- [supplanted by bakerish.toml] **rails-* lifecycle plugins**
+  (`rails-db-migrations`, `rails-db-seeds`, `rails-load-db-schema`) —
+  originally planned as separate ecosystem plugins. The 2026-05-20
+  design review concluded these are one-line shims around a single
+  `docker compose exec app rails db:<verb>` command each; making them
+  separate plugins would compound to N similar shims per ecosystem
+  (Django manage.py, Phoenix mix ecto, ...). Folded into
+  `bakerish.toml` `[prebuild.<name>]` sections instead. The Rails
+  reference snippet ships in [bakerish-toml.md doc — TODO]; rails-*
+  semantics map directly to:
+
+    ```toml
+    [prebuild.schema-load]
+    cmd = "docker compose exec app rails db:schema:load"
+    key_files = ["db/schema.rb"]            # strategy defaults to cached
+
+    [prebuild.migrate]
+    cmd = "docker compose exec app rails db:migrate"
+    key_files = ["db/schema.rb", "db/migrate"]  # NOT incremental — see spec note
+
+    [prebuild.seed]
+    cmd = "docker compose exec app rails db:seed"
+    key_files = ["db/seeds.rb"]
+    ```
+
+  See `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
+  for the full reasoning (in particular: why `rails db:migrate` is NOT
+  `incremental` — silent correctness bug on edited migrations).
+
+## bakerish.toml — project config + prebuild synthesis
+
+Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`.
+
+- [done 2026-05-20, commit 1c11e46] `lib/bake-prebuild.sh` synthesiser
+  + `lib/bake-prebuild-template.sh` runtime template. Each
+  `[prebuild.<name>]` becomes its own snapshot layer with its own
+  cache slot. 18 bats.
+- [done 2026-05-20, commit dc25e11] `bake-run` reads bakerish.toml,
+  synthesises `.bakerish/plugins/_prebuild-*`, exports
+  `PLUGIN_USER_DIRS`, appends synthesised plugins to `rl new`.
+- [done 2026-05-20, rlock commit 7e47d12] **prereq:** rlock's
+  `PLUGIN_USER_DIRS` (colon-separated list) — required for bake-run
+  to compose synth dir alongside user-global plugin dir.
+- [done 2026-05-20, rlock commit 2d46847] **prereq:**
+  `toml_get_array_in_section` in rlock's `lib/toml.sh` — section-
+  aware array reader needed by the synthesiser.
+- [ ] **`docs/bakerish-toml.md`** — format reference + per-ecosystem
+  snippets (Rails, Django, Phoenix, Go modules, ...). Explains the
+  `cached` vs `incremental` contract with the rails-db-migrate
+  caveat front-and-centre.
+- [ ] **`docs/writing-a-plugin.md`** — for users who outgrow
+  `[prebuild.<name>]`: how to write a custom plugin with finer
+  positioning, custom triggers, multi-step caching.
+- [ ] **`[memory] size`** in bakerish.toml is parsed but not yet
+  wired to anything. Override what `aq new --memory` gets — needed
+  for the docker-compose `kind = "live"` flip once aq's memory
+  pinning lands (see "docker-compose kind = live" below).
+- [ ] **`plugin = "<name>"` reference in `[prebuild.<name>]`** for
+  interleaving prebuild steps between existing plugins. Pivots
+  bakerish.toml to be the authoritative chain spec. Deferred until
+  prebuild-MVP demonstrates the need.
 
 ## Commands to add
 
-- **`bake run`** — one-shot CI job runner. Takes a command, dispatches to
-  a fresh VM (from the warmest cached layer), runs the command, captures
-  stdout/stderr + exit code, tears down. The shape mirrors `aq fanout`
-  for parallelism over multiple shards.
+- [done 2026-05-19, commit 6 weeks ago] **`bake run`** — one-shot
+  CI job runner. Reads bakerish.toml, auto-provisions VM if missing
+  (triggered plugins + synthesised prebuild), pushes HEAD via the
+  `rl` git remote, exec's the command, propagates exit code.
+- [ ] **`bake run --vm-suffix=<tag>`** for parallel-in-one-job VMs
+  (e.g. `bake run --vm-suffix=lint -- rubocop` alongside `bake run
+  --vm-suffix=test -- rspec` in the same CI job, each on its own VM
+  with its own cache slot). Per-spec section "Parallel: one VM
+  concurrent / many VMs".
 - **`bake pr <pr-url>`** — checkout an untrusted PR (from any fork), run
   the project's CI command in isolation. Variant of `bake run` with
   source = git PR ref.
@@ -42,21 +129,12 @@ items (framework, aq, AI plugins) live in the corresponding repo's TODO.
 
 ## docker-compose kind = "live"
 
-Currently `docker-compose` is `kind = "cold"`. The biggest single win in
-the bakeri.sh story is flipping it to `kind = "live"` so warm VMs resume
-from running compose state in <2 s instead of replaying `compose up` from
-cold (~10–30 s for a real stack).
-
-Blocked by:
-
-- `aq new --memory=NG` flag (tracked in `aq/ROADMAP.md`). Live snapshots
-  bind the captured RAM size; 1 GiB default in aq today is too tight for
-  realistic Docker stacks (postgres + redis + app easily exceeds 1 GiB).
-- Framework's `meta.json` RAM size pinning (will land alongside
-  `--memory`, per `rlock/docs/superpowers/specs/2026-05-18-snapshot-kind-design.md`).
-
-Once both unblock: flip `docker-compose/plugin.toml` to `kind = "live"`,
-measure savings, document in CHANGELOG.
+- [done 2026-05-19] `docker-compose/plugin.toml` is now
+  `kind = "live"` with `memory = "4G"`. aq's `--memory=NG` flag (aq
+  v2.5.0) and the framework's per-plugin `memory` declaration both
+  shipped together; the docker-compose flip followed. Live restore
+  on the rails-pg-sample fixture measured at ~1.3 s end-to-end (see
+  `../benchmark-2026-05-19-c-live-restore.md`).
 
 ## Distribution-specific UX
 
