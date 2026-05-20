@@ -91,6 +91,13 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
 - [done 2026-05-20, rlock commit 7e47d12] **prereq:** rlock's
   `PLUGIN_USER_DIRS` (colon-separated list) — required for bake-run
   to compose synth dir alongside user-global plugin dir.
+  *Follow-up rename below: PLUGIN_USER_DIRS → RLOCK_PLUGIN_PATH.*
+- [ ] **rename `PLUGIN_USER_DIRS` → `RLOCK_PLUGIN_PATH`** (rlock-side
+  change, bakeri.sh consumer follows). Current name is too generic;
+  PATH-like naming (RLOCK_ prefix, no "user", no "dir/s") makes it
+  obvious it's rlock-specific composition like shell `$PATH`. Also
+  drop the singular `PLUGIN_USER_DIR` fallback — every consumer
+  switches to RLOCK_PLUGIN_PATH (single-entry list is still fine).
 - [done 2026-05-20, rlock commit 2d46847] **prereq:**
   `toml_get_array_in_section` in rlock's `lib/toml.sh` — section-
   aware array reader needed by the synthesiser.
