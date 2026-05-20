@@ -20,10 +20,13 @@ below is scored against "does this make GH Actions CI faster / easier".
   reference setup users copy-paste from. Shows: prereq install (qemu,
   aq, rlock, bakeri.sh), actions/cache restore, `bake run -- <cmd>`,
   actions/cache save.
-- [ ] **Packaged action `pirj/setup-bakerish@v1`** — encapsulates the
-  prereq install + cache choreography. Cleaner UX than the snippet
-  once usage patterns settle. Ship after the example workflow has a
-  few real consumers.
+- [done 2026-05-21, https://github.com/pirj/setup-bakerish] **Packaged
+  action `pirj/setup-bakerish@v1`** — composite action that does
+  install + cache restore + auto-save in one step. Inputs cover ref
+  pinning, cache-key segmentation, cache-extra-paths, restore-only
+  mode, and AQ_NO_SNAPSHOT_COMPRESS surfacing. Currently private
+  during early adoption; v1 tag mutable, will cut v1.0.0 once
+  upstream repos stabilise.
 - [ ] **OCI registry cache transport** as alt-to-actions/cache for
   cross-repo / unlimited-size needs. Mirrors depot.dev's approach.
   Roadmap item; not blocking the MVP.

@@ -4,18 +4,33 @@ bakeri.sh's headline use case is GitHub Actions. The pattern in this
 doc gets you from "no CI" to "second-run sub-second-warm CI" by
 copy-pasting one workflow file and adapting the test command.
 
-## TL;DR
-
-Drop `.github/workflows/ci.yml` into your project:
+## TL;DR — packaged action (recommended)
 
 ```yaml
 name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pirj/setup-bakerish@v1
+      - run: bake run -- bundle exec rspec
+```
 
-on:
-  push:
-    branches: [main]
-  pull_request:
+`pirj/setup-bakerish@v1` is a composite action that does the install
++ cache restore + auto-save in one step. See its
+[README](https://github.com/pirj/setup-bakerish) for inputs (cache
+key segmentation, `AQ_NO_SNAPSHOT_COMPRESS=1`, ref pinning, etc.).
+**Currently private during early adoption** — you need access to
+`pirj/setup-bakerish` for `uses:` to resolve. If you don't, use the
+inline form below.
 
+## TL;DR — inline (when you don't have action access)
+
+```yaml
+name: ci
+on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -33,8 +48,7 @@ jobs:
           { echo "$HOME/aq"; echo "$HOME/rlock/bin"; echo "$HOME/bakeri.sh/bin"; } >> "$GITHUB_PATH"
           echo "RLOCK_PLUGIN_PATH=$HOME/bakeri.sh/plugins" >> "$GITHUB_ENV"
 
-      - uses: actions/cache/restore@v4
-        id: cache
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.local/share/aq/cache
@@ -43,14 +57,6 @@ jobs:
           restore-keys: bakeri-${{ runner.os }}-
 
       - run: bake run -- bundle exec rspec
-
-      - if: always() && steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.local/share/aq/cache
-            ~/.local/share/aq/x86_64
-          key: ${{ steps.cache.outputs.cache-primary-key }}
 ```
 
 Full annotated version: see
