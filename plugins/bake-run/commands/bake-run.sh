@@ -56,10 +56,14 @@ vm_name=$(resolve_vm_name 2>/dev/null) || vm_name="$(basename "$(pwd)")"
 # `rl new` / `rl warm rebuild` sees the right configuration.
 SYNTH_DIR="$(pwd)/.bakerish/plugins"
 synthesised=()
+memory_override=""
 if [[ -f "$(pwd)/bakerish.toml" ]]; then
     mapfile -t synthesised < <(bake_prebuild_synthesize \
         "$(pwd)" "$SYNTH_DIR" \
         "$BAKERI_LIB/bake-prebuild-template.sh")
+    # `[memory] size = "4G"` overrides the per-plugin max in `rl new`.
+    # Empty when absent — passed as nothing.
+    memory_override=$(toml_get_in_section "$(pwd)/bakerish.toml" "memory" "size")
 fi
 
 # Expose the synthesised plugins to rlock for discovery / resolve_deps.
@@ -87,8 +91,12 @@ if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
         die "No bakeri.sh plugins triggered in $(pwd) and no bakerish.toml [prebuild.*] sections. Need at least one of: Dockerfile, docker-compose.yml, mise.toml, .tool-versions, .ruby-version, .nvmrc — or declare prebuild steps in bakerish.toml."
     fi
     # rl new prompts when no args; passing the activation list makes
-    # it non-interactive.
-    rl new "${activate[@]}"
+    # it non-interactive. Prepend --memory if bakerish.toml [memory]
+    # size declared an override.
+    rl_new_args=()
+    [[ -n "$memory_override" ]] && rl_new_args+=("--memory=$memory_override")
+    rl_new_args+=("${activate[@]}")
+    rl new "${rl_new_args[@]}"
 else
     info "Reusing existing VM '$vm_name'"
 fi
