@@ -25,6 +25,11 @@ source "${RL_LIB_DIR}/util.sh"
 source "${RL_LIB_DIR}/plugin.sh"
 source "${RL_LIB_DIR}/toml.sh"
 
+# bakeri.sh-side library — synthesises plugins from bakerish.toml.
+# Locate it relative to this command script.
+BAKERI_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib" && pwd)"
+source "$BAKERI_LIB/bake-prebuild.sh"
+
 NO_PUSH=0
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -44,19 +49,46 @@ fi
 vm_name=$(resolve_vm_name 2>/dev/null) || vm_name="$(basename "$(pwd)")"
 [[ -n "$vm_name" ]] || die "Could not determine VM name for the current project."
 
+# Synthesise prebuild plugins from bakerish.toml (if present). The
+# synth dir lives under .bakerish/plugins/ in the project root. Even
+# if the VM already exists we regenerate — cheap, and it keeps the
+# plugin shapes consistent with the current bakerish.toml so a later
+# `rl new` / `rl warm rebuild` sees the right configuration.
+SYNTH_DIR="$(pwd)/.bakerish/plugins"
+synthesised=()
+if [[ -f "$(pwd)/bakerish.toml" ]]; then
+    mapfile -t synthesised < <(bake_prebuild_synthesize \
+        "$(pwd)" "$SYNTH_DIR" \
+        "$BAKERI_LIB/bake-prebuild-template.sh")
+fi
+
+# Expose the synthesised plugins to rlock for discovery / resolve_deps.
+# Prepend so they take precedence on name conflicts (any `_prebuild-*`
+# name is reserved here by construction; collisions only happen if
+# someone names a global user plugin `_prebuild-foo`, which we don't
+# guard against — the synthesis wins).
+if [[ ${#synthesised[@]} -gt 0 ]]; then
+    export PLUGIN_USER_DIRS="$SYNTH_DIR:${PLUGIN_USER_DIRS:-${PLUGIN_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rl/plugins}}"
+fi
+
 # Provision if missing. Auto-activate triggered plugins, no prompts.
+# Append the synthesised _prebuild-* plugins so they participate in
+# the chain at the end (their deps chain among themselves; the first
+# has deps=[] so it sorts after all explicit/triggered plugins in
+# argument order).
 if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
     info "No VM for this project yet — provisioning..."
     local_available=()
     mapfile -t local_available < <(discover_plugins)
     local_triggered=()
     mapfile -t local_triggered < <(detect_triggers "$(pwd)" "${local_available[@]}")
-    if [[ ${#local_triggered[@]} -eq 0 ]]; then
-        die "No bakeri.sh plugins triggered in $(pwd). Need at least one of: Dockerfile, docker-compose.yml, mise.toml, .tool-versions, .ruby-version, .nvmrc."
+    activate=("${local_triggered[@]}" "${synthesised[@]}")
+    if [[ ${#activate[@]} -eq 0 ]]; then
+        die "No bakeri.sh plugins triggered in $(pwd) and no bakerish.toml [prebuild.*] sections. Need at least one of: Dockerfile, docker-compose.yml, mise.toml, .tool-versions, .ruby-version, .nvmrc — or declare prebuild steps in bakerish.toml."
     fi
-    # rl new prompts when no args; passing the triggered list makes it
-    # non-interactive.
-    rl new "${local_triggered[@]}"
+    # rl new prompts when no args; passing the activation list makes
+    # it non-interactive.
+    rl new "${activate[@]}"
 else
     info "Reusing existing VM '$vm_name'"
 fi
