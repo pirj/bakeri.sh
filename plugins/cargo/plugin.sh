@@ -44,18 +44,15 @@ set -eu
 chown -R rlock:rlock /home/rlock/repo
 su -l rlock -c 'bash -l -s' <<'RLOCK'
 set -eu
-eval "$(mise activate bash 2>/dev/null)" || true
+# mise must be on PATH — this plugin declares `deps = ["mise"]`. Fail
+# loudly rather than silently using system Rust (wrong toolchain).
+eval "$(mise activate bash)"
 cd ~/repo
 
-# Rust via mise (preferred — honours rust-toolchain.toml) or via Alpine
-# packages. The plugin doesn't drive rustup since it pulls binaries off
-# the network and would defeat the "warm-from-cache" promise.
-if ! command -v cargo >/dev/null 2>&1; then
-    sudo apk add rust cargo 2>/dev/null || {
-        echo "ERROR: cargo not available. Declare rust in mise.toml or update Alpine." >&2
-        exit 1
-    }
-fi
+# Project must declare `rust` in mise.toml / rust-toolchain.toml.
+# Falling back to apk's `rust cargo` would bind to whatever Alpine
+# ships — wrong toolchain, hard-to-debug.
+command -v cargo >/dev/null 2>&1
 
 # `cargo fetch` downloads all dependencies declared in Cargo.lock into
 # ~/.cargo/registry. It does NOT compile — that's deliberate: compile

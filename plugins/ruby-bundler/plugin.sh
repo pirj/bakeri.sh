@@ -44,13 +44,19 @@ apk add build-base libffi-dev openssl-dev readline-dev yaml-dev zlib-dev
 
 su -l rlock -c 'bash -l -s' <<'RLOCK'
 set -eu
-eval "$(mise activate bash 2>/dev/null)" || true
+# mise must be on PATH — this plugin declares `deps = ["mise"]`, so a
+# missing `mise` here is a regression upstream, not a runtime fallback
+# case. Fail loudly instead of silently using system Ruby (which would
+# install gems against the wrong Ruby version).
+eval "$(mise activate bash)"
 cd ~/repo
 
-# Use bundler from mise if available, otherwise install via gem.
-if ! command -v bundle >/dev/null 2>&1; then
-    gem install --no-document bundler
-fi
+# Bundler must come from the mise-managed Ruby. If `bundle` isn't
+# resolvable, the project's Gemfile probably needs an explicit bundler
+# version pin via .bundler-version or Gemfile's `gem 'bundler'`. Fail
+# loudly so the user sees the actual cause rather than a phantom
+# system-bundler success.
+command -v bundle >/dev/null 2>&1
 
 # `bundle config set --local path vendor/bundle` keeps gems in-tree so
 # the cache layer captures them. --jobs=4 parallelises downloads; --retry

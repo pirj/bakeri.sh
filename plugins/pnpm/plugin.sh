@@ -48,22 +48,22 @@ set -eu
 chown -R rlock:rlock /home/rlock/repo
 su -l rlock -c 'bash -l -s' <<'RLOCK'
 set -eu
-eval "$(mise activate bash 2>/dev/null)" || true
+# mise must be on PATH — this plugin declares `deps = ["mise"]`. Fail
+# loudly rather than silently using system Node (wrong version).
+eval "$(mise activate bash)"
 cd ~/repo
 
-# pnpm via mise (preferred — pinned in tool-versions) or via corepack /
-# global npm. corepack is bundled with Node 16+ and provisions pnpm at
-# the version declared in package.json's packageManager field.
+# Project must declare pnpm in mise.toml / .tool-versions / via
+# corepack's packageManager field in package.json. If pnpm still isn't
+# on PATH after mise activation + corepack auto-provision, fail —
+# don't `npm install -g pnpm` against the wrong Node, don't fall back
+# to system pnpm.
 if ! command -v pnpm >/dev/null 2>&1; then
     if command -v corepack >/dev/null 2>&1; then
         corepack enable pnpm
-    elif command -v npm >/dev/null 2>&1; then
-        npm install -g pnpm
-    else
-        echo "ERROR: pnpm not available. Declare Node in mise.toml or .nvmrc." >&2
-        exit 1
     fi
 fi
+command -v pnpm >/dev/null 2>&1
 
 # `pnpm install` honours the lockfile and works incrementally — only
 # packages absent from the store get fetched, only project nodes_modules

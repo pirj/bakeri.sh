@@ -43,17 +43,15 @@ set -eu
 chown -R rlock:rlock /home/rlock/repo
 su -l rlock -c 'bash -l -s' <<'RLOCK'
 set -eu
-eval "$(mise activate bash 2>/dev/null)" || true
+# mise must be on PATH — this plugin declares `deps = ["mise"]`. Fail
+# loudly rather than silently using a system Python (wrong version).
+eval "$(mise activate bash)"
 cd ~/repo
 
-# poetry is in Alpine community (py3-poetry). mise can install it too;
-# prefer mise if the project declares it, otherwise fall back.
-if ! command -v poetry >/dev/null 2>&1; then
-    sudo apk add py3-poetry 2>/dev/null || {
-        echo "ERROR: poetry not available. Declare poetry in mise.toml or update Alpine." >&2
-        exit 1
-    }
-fi
+# Project must declare `poetry` (or `python` + a way to install poetry)
+# in mise.toml / .tool-versions. Falling back to apk's py3-poetry would
+# bind to the system Python — wrong version, hard-to-debug.
+command -v poetry >/dev/null 2>&1
 
 # Keep .venv inside the project so the cache layer captures it.
 poetry config virtualenvs.in-project true
