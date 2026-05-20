@@ -104,10 +104,10 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
 - [ ] **`docs/writing-a-plugin.md`** — for users who outgrow
   `[prebuild.<name>]`: how to write a custom plugin with finer
   positioning, custom triggers, multi-step caching.
-- [ ] **`[memory] size`** in bakerish.toml is parsed but not yet
-  wired to anything. Override what `aq new --memory` gets — needed
-  for the docker-compose `kind = "live"` flip once aq's memory
-  pinning lands (see "docker-compose kind = live" below).
+- [done 2026-05-21, commit 981acbf + rlock 58d8fef] **`[memory] size`
+  in bakerish.toml** — overrides `aq new --memory` via the new
+  `rl new --memory=NG` flag. Takes precedence over the per-plugin
+  max_snapshot_memory derivation; falls back to it when omitted.
 - [ ] **`plugin = "<name>"` reference in `[prebuild.<name>]`** for
   interleaving prebuild steps between existing plugins. Pivots
   bakerish.toml to be the authoritative chain spec. Deferred until

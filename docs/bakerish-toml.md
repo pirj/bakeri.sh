@@ -35,9 +35,20 @@ customise.
 size = "4G"
 ```
 
-Currently parsed but not yet wired (tracked in TODO). Will override
-`aq new --memory` once the wiring lands; for now, plugin-declared
-memory (e.g. `docker-compose`'s `memory = "4G"`) is the only knob.
+Overrides the guest RAM that `aq new --memory` is given. Takes
+precedence over the per-plugin `max_snapshot_memory` derivation —
+that is, declaring `4G` here pins the VM at 4 GiB regardless of what
+the active plugins individually request. Useful when you need *more*
+RAM than the chain's plugins ask for (extra headroom for your tests'
+runtime memory), or when you want an explicit pin so it's visible in
+project config.
+
+If `[memory] size` is absent, the framework falls back to the per-
+plugin max (e.g. `docker-compose` declares `memory = "4G"`, so a
+chain including docker-compose ends up at 4G even without this
+section).
+
+Format: `<N>` or `<N>G` (the G suffix is tolerated either way).
 
 ### `[prebuild.<name>]`
 
