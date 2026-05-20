@@ -27,7 +27,7 @@ bakeri.sh is a plugin pack: it provides plugins for the rlock framework. Clone b
 git clone git@github.com:pirj/rlock.git
 git clone git@github.com:pirj/bakeri.sh.git
 export PATH="$PWD/rlock/bin:$PWD/bakeri.sh/bin:$PATH"
-export PLUGIN_USER_DIR="$PWD/bakeri.sh/plugins"
+export RLOCK_PLUGIN_PATH="$PWD/bakeri.sh/plugins"
 
 cd your-project   # has Dockerfile / docker-compose.yml
 rl new            # provisions the VM, walking the cache chain

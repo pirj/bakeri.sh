@@ -63,12 +63,12 @@ if [[ -f "$(pwd)/bakerish.toml" ]]; then
 fi
 
 # Expose the synthesised plugins to rlock for discovery / resolve_deps.
-# Prepend so they take precedence on name conflicts (any `_prebuild-*`
-# name is reserved here by construction; collisions only happen if
-# someone names a global user plugin `_prebuild-foo`, which we don't
-# guard against — the synthesis wins).
+# Prepend to RLOCK_PLUGIN_PATH so they take precedence on name conflicts
+# (any `_prebuild-*` name is reserved here by construction; collisions
+# only happen if someone names a global user plugin `_prebuild-foo`,
+# which we don't guard against — the synthesis wins).
 if [[ ${#synthesised[@]} -gt 0 ]]; then
-    export PLUGIN_USER_DIRS="$SYNTH_DIR:${PLUGIN_USER_DIRS:-${PLUGIN_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rl/plugins}}"
+    export RLOCK_PLUGIN_PATH="$SYNTH_DIR:${RLOCK_PLUGIN_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/rl/plugins}"
 fi
 
 # Provision if missing. Auto-activate triggered plugins, no prompts.

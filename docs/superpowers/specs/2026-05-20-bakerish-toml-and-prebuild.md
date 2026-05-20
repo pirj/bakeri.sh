@@ -170,11 +170,11 @@ discovery in rlock.
 
 ### rlock-side change (small, generic)
 
-`discover_plugins` extends to accept a **colon-separated list** of
-plugin directories via `$PLUGIN_USER_DIRS` (replacing the singular
-`$PLUGIN_USER_DIR` for advanced callers). Iterates each in order.
-Generic — any distribution can compose extra plugin sources without
-rlock learning their config files.
+`discover_plugins` accepts `RLOCK_PLUGIN_PATH` — a colon-separated
+PATH-like list of plugin directories. Defaults to
+`~/.config/rl/plugins` when unset. Earlier entries win on name
+conflicts. Generic — any distribution can compose extra plugin
+sources without rlock learning their config files.
 
 ### bakeri.sh-side synthesis (in `bin/bake`)
 
@@ -198,9 +198,10 @@ with these steps:
    `bake-prebuild-hooks` plugin's `start()` hook to run the cmd.
    (Or generate per-section start-hook plugins; smaller blast
    radius if one cmd fails.)
-4. Set `PLUGIN_USER_DIRS="$HOME/.config/rl/plugins:$PROJECT/.bakerish/plugins"`
-   so rlock discovers both user-installed plugins and project-local
-   synthesised ones.
+4. Prepend the synth dir to `RLOCK_PLUGIN_PATH` —
+   `RLOCK_PLUGIN_PATH="$PROJECT/.bakerish/plugins:$RLOCK_PLUGIN_PATH"` —
+   so rlock's discover_plugins picks up the synthesised plugins
+   alongside the existing user-global ones.
 5. Call `rl new <activated-plugins>` with the synthesised plugin
    names appended.
 
@@ -349,7 +350,7 @@ second once usage patterns settle.
 These go into `bakeri.sh/TODO.md`:
 
 - [ ] **bake-prebuild MVP** (this spec). Includes rlock's
-  `PLUGIN_USER_DIRS` extension as a prereq.
+  `RLOCK_PLUGIN_PATH` extension as a prereq.
 - [ ] **`bake run` auto-create + `--vm-suffix`**.
 - [ ] **Footgun fix in 6 dep-installer plugins** (`mise activate`
   swallow).

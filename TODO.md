@@ -87,17 +87,13 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
   cache slot. 18 bats.
 - [done 2026-05-20, commit dc25e11] `bake-run` reads bakerish.toml,
   synthesises `.bakerish/plugins/_prebuild-*`, exports
-  `PLUGIN_USER_DIRS`, appends synthesised plugins to `rl new`.
-- [done 2026-05-20, rlock commit 7e47d12] **prereq:** rlock's
-  `PLUGIN_USER_DIRS` (colon-separated list) — required for bake-run
-  to compose synth dir alongside user-global plugin dir.
-  *Follow-up rename below: PLUGIN_USER_DIRS → RLOCK_PLUGIN_PATH.*
-- [ ] **rename `PLUGIN_USER_DIRS` → `RLOCK_PLUGIN_PATH`** (rlock-side
-  change, bakeri.sh consumer follows). Current name is too generic;
-  PATH-like naming (RLOCK_ prefix, no "user", no "dir/s") makes it
-  obvious it's rlock-specific composition like shell `$PATH`. Also
-  drop the singular `PLUGIN_USER_DIR` fallback — every consumer
-  switches to RLOCK_PLUGIN_PATH (single-entry list is still fine).
+  `RLOCK_PLUGIN_PATH`, appends synthesised plugins to `rl new`.
+- [done 2026-05-21, rlock commit pending] **prereq:** rlock's
+  `RLOCK_PLUGIN_PATH` — colon-separated PATH-like list of plugin
+  directories. Replaces the older `PLUGIN_USER_DIR` / `PLUGIN_USER_DIRS`
+  pair entirely; the singular `PLUGIN_USER_DIR` form is gone. Default
+  when unset: `~/.config/rl/plugins`. Earlier entries win on name
+  conflicts.
 - [done 2026-05-20, rlock commit 2d46847] **prereq:**
   `toml_get_array_in_section` in rlock's `lib/toml.sh` — section-
   aware array reader needed by the synthesiser.
