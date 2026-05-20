@@ -97,8 +97,12 @@ jobs:
       - name: Run tests
         run: bake run -- bundle exec rspec
         # If you split work into multiple `bake run` calls, they
-        # reuse the same VM by default. Add --vm-suffix=<tag> (when
-        # shipped) to fan out across multiple VMs in the same job.
+        # reuse the same VM by default. Add --vm-suffix=<tag> to fan
+        # out across independent VMs within the same job, e.g.
+        #   bake run --vm-suffix=lint -- rubocop &
+        #   bake run --vm-suffix=test -- rspec  &
+        #   wait
+        # Each suffixed VM has its own state and cache slot.
 
       # Save the layer cache. Always-save semantic (`if: always()`)
       # lets you cache partial progress even when tests fail — the

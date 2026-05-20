@@ -31,22 +31,33 @@ BAKERI_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib" && pwd)"
 source "$BAKERI_LIB/bake-prebuild.sh"
 
 NO_PUSH=0
+VM_SUFFIX=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --no-push) NO_PUSH=1; shift ;;
-        --)        shift; break ;;
-        --*)       stderr "Error: unknown flag '$1'"; exit 2 ;;
-        *)         break ;;
+        --no-push)         NO_PUSH=1; shift ;;
+        --vm-suffix=*)     VM_SUFFIX="${1#--vm-suffix=}"; shift ;;
+        --vm-suffix)       VM_SUFFIX="${2:-}"; shift 2 ;;
+        --)                shift; break ;;
+        --*)               stderr "Error: unknown flag '$1'"; exit 2 ;;
+        *)                 break ;;
     esac
 done
 
 if [ $# -eq 0 ]; then
-    stderr "Usage: rl bake-run [--no-push] [--] <command> [args...]"
+    stderr "Usage: rl bake-run [--no-push] [--vm-suffix=<tag>] [--] <command> [args...]"
     exit 2
 fi
 
-# Resolve VM name (plugin resolve_vm hooks first, then CWD basename).
-vm_name=$(resolve_vm_name 2>/dev/null) || vm_name="$(basename "$(pwd)")"
+# Resolve VM name. When --vm-suffix is given we bypass resolve_vm_name
+# and `.rl/vm-name` entirely — each suffixed call works against its
+# own VM independently, identified solely by basename-<suffix>. Useful
+# for fan-out within one CI job (e.g. --vm-suffix=lint vs
+# --vm-suffix=test) where each VM has its own state and snapshot cache.
+if [[ -n "$VM_SUFFIX" ]]; then
+    vm_name="$(basename "$(pwd)")-${VM_SUFFIX}"
+else
+    vm_name=$(resolve_vm_name 2>/dev/null) || vm_name="$(basename "$(pwd)")"
+fi
 [[ -n "$vm_name" ]] || die "Could not determine VM name for the current project."
 
 # Synthesise prebuild plugins from bakerish.toml (if present). The
@@ -91,10 +102,11 @@ if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
         die "No bakeri.sh plugins triggered in $(pwd) and no bakerish.toml [prebuild.*] sections. Need at least one of: Dockerfile, docker-compose.yml, mise.toml, .tool-versions, .ruby-version, .nvmrc — or declare prebuild steps in bakerish.toml."
     fi
     # rl new prompts when no args; passing the activation list makes
-    # it non-interactive. Prepend --memory if bakerish.toml [memory]
-    # size declared an override.
+    # it non-interactive. Prepend --memory + --name flags as the
+    # bakerish.toml / --vm-suffix settings call for.
     rl_new_args=()
     [[ -n "$memory_override" ]] && rl_new_args+=("--memory=$memory_override")
+    [[ -n "$VM_SUFFIX"       ]] && rl_new_args+=("--name=$vm_name")
     rl_new_args+=("${activate[@]}")
     rl new "${rl_new_args[@]}"
 else

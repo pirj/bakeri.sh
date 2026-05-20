@@ -119,11 +119,13 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
   CI job runner. Reads bakerish.toml, auto-provisions VM if missing
   (triggered plugins + synthesised prebuild), pushes HEAD via the
   `rl` git remote, exec's the command, propagates exit code.
-- [ ] **`bake run --vm-suffix=<tag>`** for parallel-in-one-job VMs
-  (e.g. `bake run --vm-suffix=lint -- rubocop` alongside `bake run
-  --vm-suffix=test -- rspec` in the same CI job, each on its own VM
-  with its own cache slot). Per-spec section "Parallel: one VM
-  concurrent / many VMs".
+- [done 2026-05-21, commit pending] **`bake run --vm-suffix=<tag>`**
+  for parallel-in-one-job VMs. Prereq: rlock's `rl new --name=<vm>`
+  flag (commit pending in rlock) — lets bake-run pin the synthesised
+  VM name to `<basename>-<suffix>` rather than the cwd-derived
+  default. Each suffixed VM has its own state + cache slot; layer
+  cache (under $RL_CACHE_DIR) is shared by `(plugin, snapshot_key)`
+  so the snapshot layers transparently reuse across suffixes.
 - **`bake pr <pr-url>`** — checkout an untrusted PR (from any fork), run
   the project's CI command in isolation. Variant of `bake run` with
   source = git PR ref.

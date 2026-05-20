@@ -134,8 +134,26 @@ step's exit code; failing one fails the job per GH Actions semantics.
 
 If two commands genuinely conflict on shared state (e.g. both mutate
 the DB) and you don't want them serialised, use `--vm-suffix=<tag>`
-(roadmap item) to give them independent VMs in the same job, or split
-into separate jobs.
+to give them independent VMs in the same job:
+
+```yaml
+- run: |
+    bake run --vm-suffix=lint -- rubocop &
+    bake run --vm-suffix=test -- bundle exec rspec &
+    wait
+```
+
+Each suffixed VM (`<project-basename>-lint`, `<project-basename>-test`)
+gets its own state and snapshot cache slot. The cache RESTORE step
+above still seeds both — they share `~/.local/share/aq/cache/` (which
+keys by `(plugin, snapshot_key)`, not by VM name).
+
+Caveat for local mixed-suffix use: bake-run reconfigures the `rl`
+git remote on every `rl new`, so if you alternate `bake run
+--vm-suffix=A` and `bake run --vm-suffix=B` from the same project
+dir, the rl remote points at whichever VM was last provisioned. The
+push step inside bake-run may go to the wrong VM. On CI this is a
+non-issue (each shard's runner has its own filesystem).
 
 ## Cold first-run wall-clock
 
