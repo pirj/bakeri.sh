@@ -172,6 +172,15 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
   analytics (`rl cache stats` — see `rlock/TODO.md`).
 - "Per-VM CPU/memory caps for shards" — already an `aq` follow-up under
   fanout. Surface from `bake run --max-cpu --max-mem` once aq supports.
+- [ ] **`examples/` directory** — ready-to-fork project skeletons
+  showing canonical `bakerish.toml` + `.github/workflows/ci.yml`
+  pairs per ecosystem (Rails+PG, Django+PG, Phoenix+PG, plain
+  Node/pnpm, Go modules, ...). The per-ecosystem snippets in
+  `docs/bakerish-toml.md` are reference fragments; an
+  `examples/<ecosystem>/` carries a working fixture you can clone
+  and adapt. Build incrementally — first Rails+PG (reuse
+  `test/fixtures/rails-pg-sample`), then add ecosystems as adopter
+  demand surfaces.
 
 ## Shared docker-engine layer
 
