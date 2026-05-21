@@ -10,16 +10,11 @@ bakeri.sh is primarily a CI runner. Local PR isolation is a side use case
 deferred to a future separate tool (working title `p.rlock`). Anything
 below is scored against "does this make GH Actions CI faster / easier".
 
-- [ ] **Cross-machine snapshot transport via `actions/cache`**. The
-  layer cache must survive between CI runs. MVP: GH Actions native
-  `actions/cache@v4` keyed by `hashFiles('bakerish.toml', '<lockfiles>',
-  ...)`. Free, no setup, ~10 GB / 7-day retention limits. The cache
-  dir is `~/.local/share/aq/cache/` — restore/save it, every other
-  bake-run on the runner is sub-second warm.
-- [ ] **`bakeri.sh/.github/workflows/example-bakerish-ci.yml`** — the
-  reference setup users copy-paste from. Shows: prereq install (qemu,
-  aq, rlock, bakeri.sh), actions/cache restore, `bake run -- <cmd>`,
-  actions/cache save.
+- [done 2026-05-21, commit 532644c] **Cross-machine snapshot transport
+  via `actions/cache`** + the reference workflow
+  `.github/workflows/example-bakerish-ci.yml`. Both shipped together.
+  The cache dir `~/.local/share/aq/cache/` round-trips between CI
+  runs; second-and-later runs hit sub-second-warm.
 - [done 2026-05-21, https://github.com/pirj/setup-bakerish] **Packaged
   action `pirj/setup-bakerish@v1`** — composite action that does
   install + cache restore + auto-save in one step. Inputs cover ref
@@ -46,23 +41,28 @@ below is scored against "does this make GH Actions CI faster / easier".
 Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
 (prebuild) and a future GH-CI-specific spec doc.
 
-## Plugins to add
+## Plugins — shipped baseline
 
-- **`mise`** — tool-version manager. `triggers = ["mise.toml", ".tool-versions"]`.
-  `snapshot_key` = hash of mise config + `.ruby-version` / `.nvmrc` / etc.
-  `strategy = "cached"`, `kind = "cold"`.
-- **`ruby-bundler`** — `deps = ["mise"]`, `triggers = ["Gemfile.lock"]`,
-  `strategy = "incremental"`, `kind = "cold"`. `snapshot_build` runs
-  `bundle install --jobs=4`.
-- **`npm`** — `deps = ["mise"]`, `triggers = ["package-lock.json"]`,
-  `strategy = "incremental"`, `kind = "cold"`. `snapshot_build` runs
-  `npm ci`.
+All baseline plugins for the bakeri.sh CI distribution shipped pre-
+2026-05-19:
+
+- [done] **`mise`** — tool-version manager. Cached cold; hashes
+  mise.toml / .tool-versions / .ruby-version / .nvmrc.
+- [done] **`ruby-bundler`** — incremental cold; deps on mise; runs
+  `bundle install` against Gemfile.lock.
+- [done] **`npm`** — incremental cold; deps on mise; runs `npm install
+  --prefer-offline` against package-lock.json.
 - [done 2026-05-19, commit 314476f] **`uv`** / **`poetry`** / **`pnpm`** /
   **`cargo`** — dep-installer plugins mirroring the npm / ruby-bundler
   shape (incremental cold, deps on mise). Each scp's its lockfile +
   manifest into /home/rlock/repo, then runs the install command via
-  mise-managed or apk-fallback tooling. `cargo` stops at `cargo fetch`
-  (target/ build is the user's call).
+  mise-managed tooling. `cargo` stops at `cargo fetch` (target/ build
+  is the user's call).
+- [done 2026-05-19, commit 29a75fd] **`docker-engine`** + **`docker-
+  compose`** (cached cold + cached live) + **`docker-registry-cache`**
+  for the host-side pull-through Docker registry.
+
+## Plugins — supplanted by bakerish.toml
 - [supplanted by bakerish.toml] **rails-* lifecycle plugins**
   (`rails-db-migrations`, `rails-db-seeds`, `rails-load-db-schema`) —
   originally planned as separate ecosystem plugins. The 2026-05-20
@@ -112,13 +112,12 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
 - [done 2026-05-20, rlock commit 2d46847] **prereq:**
   `toml_get_array_in_section` in rlock's `lib/toml.sh` — section-
   aware array reader needed by the synthesiser.
-- [ ] **`docs/bakerish-toml.md`** — format reference + per-ecosystem
-  snippets (Rails, Django, Phoenix, Go modules, ...). Explains the
-  `cached` vs `incremental` contract with the rails-db-migrate
+- [done 2026-05-21, commit ab40f7a] **`docs/bakerish-toml.md`** —
+  format reference + per-ecosystem snippets (Rails, Django, Phoenix,
+  Go modules). Cached/incremental contract with the rails-migrate
   caveat front-and-centre.
-- [ ] **`docs/writing-a-plugin.md`** — for users who outgrow
-  `[prebuild.<name>]`: how to write a custom plugin with finer
-  positioning, custom triggers, multi-step caching.
+- [done 2026-05-21, commit 5546d20] **`docs/writing-a-plugin.md`** —
+  escape-hatch guide for cases that outgrow `[prebuild.<name>]`.
 - [done 2026-05-21, commit 981acbf + rlock 58d8fef] **`[memory] size`
   in bakerish.toml** — overrides `aq new --memory` via the new
   `rl new --memory=NG` flag. Takes precedence over the per-plugin
@@ -141,11 +140,21 @@ Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
   default. Each suffixed VM has its own state + cache slot; layer
   cache (under $RL_CACHE_DIR) is shared by `(plugin, snapshot_key)`
   so the snapshot layers transparently reuse across suffixes.
-- **`bake pr <pr-url>`** — checkout an untrusted PR (from any fork), run
-  the project's CI command in isolation. Variant of `bake run` with
-  source = git PR ref.
-- **`bake snapshot ls / rm / inspect`** — explicit management of the
-  layered cache. Wrap `aq snapshot` underneath.
+- [~] **`bake pr`** — partial: GitHub PR URLs + GitLab MR URLs +
+  `--no-isolation` shipped 2026-05-19 (commit e03ff1a). **Remaining**:
+  - [ ] Bitbucket PR URLs (no widely-deployed CLI; needs HTTP-API
+    path).
+  - [ ] Auto-detect command from `.github/workflows/*.yml` /
+    `.gitlab-ci.yml` so `bake pr <url>` works without `--cmd`.
+- [ ] **`bake snapshot ls / rm / inspect`** — explicit management of
+  the layered cache. Wrap `aq snapshot` underneath. (Current
+  `bake-cache` covers ls/rm; `inspect` for layer parent chains +
+  per-key metadata is the gap.)
+- [ ] **Cleanup of stale `_bake_run` / `_bake_pr` refs on the VM**.
+  Each `bake run` / `bake pr` force-pushes to a dedicated ref
+  (`refs/heads/_bake_run`, `refs/heads/_bake_pr`). They accumulate
+  on the guest's git tree across many invocations. Add an `rl rm`
+  hook (or a periodic GC step) to drop refs older than N days.
 
 ## docker-compose kind = "live"
 
