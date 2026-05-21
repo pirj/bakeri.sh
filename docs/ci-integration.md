@@ -161,6 +161,55 @@ dir, the rl remote points at whichever VM was last provisioned. The
 push step inside bake-run may go to the wrong VM. On CI this is a
 non-issue (each shard's runner has its own filesystem).
 
+## Two-tier cache (GH cache + OCI fallback)
+
+GH Actions cache has a **10 GB / repo** quota and **7-day inactivity
+eviction**. For multi-project orgs or repos with high churn, that's
+limiting. OCI registries (GHCR, ECR, ...) have neither limit.
+
+Use OCI as a **second-tier backstop**: GH cache primary (fast,
+ephemeral), OCI fallback when the GH cache evicts or misses.
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  - uses: pirj/setup-bakerish@v1
+    with:
+      oci-cache-ref: ghcr.io/${{ github.repository_owner }}/bakerish-cache:latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  - run: bake run -- bundle exec rspec
+
+  # Push on main only — avoid per-PR-commit churn in the long-term store.
+  - name: Push cache to OCI (main only)
+    if: always() && github.ref == 'refs/heads/main'
+    run: bake cache --push ghcr.io/${{ github.repository_owner }}/bakerish-cache:latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+`bake cache --push` is **per-layer**: each `(plugin, snapshot_key)`
+slot becomes its own blob in the OCI artifact. Identical slot
+content across pushes dedups server-side by sha256, so an unchanged
+`_base` / `docker-engine` / `ruby-bundler` slot doesn't re-upload —
+only the changed layer (e.g. updated `db/migrate/` re-runs
+`rails db:migrate`) actually transfers bytes.
+
+Active PR with 10 commits each touching one migration: ~50 MB
+upload per push, not 2.6 GB.
+
+**GHCR auth** is via `GITHUB_TOKEN`. Workflow permissions must
+include `packages: write` for push, `packages: read` for pull-only
+jobs.
+
+**Cache TTL**: GHCR has no automatic eviction — blobs persist until
+deleted. Run a periodic GC job (`bake cache --gc <ref>` — TBD
+roadmap) to prune stale layer manifests; or rely on registry-side
+lifecycle policies when the provider supports them (ECR does, GHCR
+doesn't yet).
+
 ## Cold first-run wall-clock
 
 First CI run on a fresh cache key: expect the cold path's full

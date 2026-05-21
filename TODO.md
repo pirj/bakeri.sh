@@ -27,9 +27,21 @@ below is scored against "does this make GH Actions CI faster / easier".
   mode, and AQ_NO_SNAPSHOT_COMPRESS surfacing. Currently private
   during early adoption; v1 tag mutable, will cut v1.0.0 once
   upstream repos stabilise.
-- [ ] **OCI registry cache transport** as alt-to-actions/cache for
-  cross-repo / unlimited-size needs. Mirrors depot.dev's approach.
-  Roadmap item; not blocking the MVP.
+- [~] **OCI registry cache transport** (alt / supplement to
+  actions/cache). **Shipped**: per-layer `bake cache --push <oci-ref>`
+  / `--pull <oci-ref>` (commit 4ea3750) + two-tier integration in
+  setup-bakerish (`oci-cache-ref` input, GH cache primary + OCI
+  fallback). Per-layer model dedups identical slots server-side by
+  sha256 — active PR churn uploads ~50 MB per commit (the one
+  changed slot), not 2.6 GB. **Remaining**:
+  - [ ] `bake cache --gc <oci-ref>` for periodic cleanup
+    (registry-specific manifest enumeration). GHCR has no auto-TTL
+    so this matters for long-lived caches.
+  - [ ] Chunk-level dedup à la depot.dev (chunk qcow2 files,
+    per-chunk content-addressable storage). Deferred until a
+    measured pain point appears — for ephemeral CI runners the
+    pull-side bandwidth win is marginal; storage-side dedup is the
+    real value.
 
 Full design in `docs/superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md`
 (prebuild) and a future GH-CI-specific spec doc.
