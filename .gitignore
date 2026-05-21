@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+
+# Editor
+*.swp
+*~
+.idea/
+.vscode/
+
+# AI assistant working files
+.claude/
+.aider*
+
+# Project-local state produced by `rl new` / `bake run`
+.rl/
+.bakerish/
