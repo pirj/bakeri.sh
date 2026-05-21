@@ -11,8 +11,10 @@ setup() {
     STUB_LIB="$BATS_TEST_TMPDIR/stub_lib"
     mkdir -p "$STUB_LIB"
     cat > "$STUB_LIB/ui.sh" <<'STUB'
-info() { echo "[info] $*"; }
-warn() { echo "[warn] $*" >&2; }
+info()   { echo "[info] $*"; }
+warn()   { echo "[warn] $*" >&2; }
+stderr() { echo "$@" >&2; }
+die()    { echo "Error: $*" >&2; exit 1; }
 STUB
 
     CACHE_DIR="$BATS_TEST_TMPDIR/cache"
@@ -130,4 +132,130 @@ M
     [ ! -d "$CACHE_DIR/docker-engine" ]
     [ ! -d "$CACHE_DIR/docker-compose/dc_k1" ]
     [ -f "$CACHE_DIR/unrelated/u_k1/disk.qcow2" ]
+}
+
+# --- push / pull via OCI -------------------------------------------------
+#
+# `oras` is mocked with a shell script that records its argv to
+# bin_stub/oras.log and, for `oras push`, just creates a sentinel file
+# so the script's `tar` work can be observed. For `oras pull` it writes
+# pre-canned tarballs into the output dir.
+
+_setup_oras_stub_for_push() {
+    local bin_stub="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$bin_stub"
+    cat > "$bin_stub/oras" <<'ORAS'
+#!/usr/bin/env bash
+# Record argv (and cwd so we can verify staging-dir relative-paths).
+echo "cwd=$(pwd)" >> "$BATS_TEST_TMPDIR/oras.log"
+echo "argv=$*"    >> "$BATS_TEST_TMPDIR/oras.log"
+ORAS
+    chmod +x "$bin_stub/oras"
+    PATH="$bin_stub:$PATH"
+    export PATH
+}
+
+@test "bake-cache --push errors without ref" {
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push
+    assert_failure 2
+    assert_output --partial "Usage: rl bake-cache --push"
+}
+
+@test "bake-cache --push errors when oras is not installed" {
+    # PATH that has /bin (for bash itself) but not the stub dir → oras absent.
+    run env PATH="/bin:/usr/bin" RL_LIB_DIR="$STUB_LIB" \
+        RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push ghcr.io/x/y:latest
+    assert_failure 1
+    assert_output --partial "oras CLI required"
+}
+
+@test "bake-cache --push is a no-op when cache is empty" {
+    _setup_oras_stub_for_push
+    rm -rf "$CACHE_DIR"
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push ghcr.io/x/y:latest
+    assert_success
+    assert_output --partial "Cache empty"
+    # oras must not have been called.
+    [ ! -f "$BATS_TEST_TMPDIR/oras.log" ]
+}
+
+@test "bake-cache --push tars every layer and invokes oras push" {
+    _setup_oras_stub_for_push
+    mkdir -p "$CACHE_DIR/_base/k1" "$CACHE_DIR/docker-compose/k2"
+    echo "diskbytes" > "$CACHE_DIR/_base/k1/disk.qcow2"
+    echo '{"kind":"cold"}' > "$CACHE_DIR/_base/k1/meta.json"
+    echo "diskbytes" > "$CACHE_DIR/docker-compose/k2/disk.qcow2"
+    echo "memzst"   > "$CACHE_DIR/docker-compose/k2/memory.bin.zst"
+
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push ghcr.io/x/y:latest
+    assert_success
+    assert_output --partial "Pushing 2 layers"
+
+    # oras was invoked once.
+    [ -f "$BATS_TEST_TMPDIR/oras.log" ]
+    local oras_argv
+    oras_argv=$(grep '^argv=' "$BATS_TEST_TMPDIR/oras.log")
+    [[ "$oras_argv" == *"push"* ]]
+    [[ "$oras_argv" == *"ghcr.io/x/y:latest"* ]]
+    # Each layer should appear as a tar.gz arg with the bakerish media
+    # type annotation.
+    [[ "$oras_argv" == *"_base__k1.tar.gz:application/vnd.bakerish.layer.v1+gzip"* ]]
+    [[ "$oras_argv" == *"docker-compose__k2.tar.gz:application/vnd.bakerish.layer.v1+gzip"* ]]
+}
+
+@test "bake-cache --pull errors without ref" {
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --pull
+    assert_failure 2
+    assert_output --partial "Usage: rl bake-cache --pull"
+}
+
+@test "bake-cache --pull errors when oras is not installed" {
+    run env PATH="/bin:/usr/bin" RL_LIB_DIR="$STUB_LIB" \
+        RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --pull ghcr.io/x/y:latest
+    assert_failure 1
+    assert_output --partial "oras CLI required"
+}
+
+@test "bake-cache --pull untars layers from the artifact into RL_CACHE_DIR" {
+    # Oras stub for pull: it writes two pre-canned tarballs into the
+    # output dir (the -o argument), simulating what a real pull would
+    # produce.
+    local bin_stub="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$bin_stub"
+    cat > "$bin_stub/oras" <<'ORAS'
+#!/usr/bin/env bash
+# Parse `oras pull <ref> -o <dir>`.
+out_dir=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o) out_dir="$2"; shift 2 ;;
+        *)  shift ;;
+    esac
+done
+[ -n "$out_dir" ] || { echo "stub: missing -o" >&2; exit 1; }
+
+# Cook up two layer tarballs whose roots are "<plugin>/<key>/<file>".
+staging=$(mktemp -d)
+mkdir -p "$staging/_base/restored-k1"
+echo "from-registry-base"   > "$staging/_base/restored-k1/disk.qcow2"
+echo '{"kind":"cold"}'      > "$staging/_base/restored-k1/meta.json"
+tar czf "$out_dir/_base__restored-k1.tar.gz" -C "$staging" _base/restored-k1
+
+mkdir -p "$staging/docker-compose/restored-k2"
+echo "from-registry-compose" > "$staging/docker-compose/restored-k2/disk.qcow2"
+tar czf "$out_dir/docker-compose__restored-k2.tar.gz" -C "$staging" docker-compose/restored-k2
+rm -rf "$staging"
+ORAS
+    chmod +x "$bin_stub/oras"
+    PATH="$bin_stub:$PATH"
+    export PATH
+
+    run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --pull ghcr.io/x/y:latest
+    assert_success
+    assert_output --partial "restored 2 layer(s)"
+
+    # The fake artifact's two layers should now exist under CACHE_DIR.
+    [ -f "$CACHE_DIR/_base/restored-k1/disk.qcow2" ]
+    [ -f "$CACHE_DIR/docker-compose/restored-k2/disk.qcow2" ]
+    [ "$(cat "$CACHE_DIR/_base/restored-k1/disk.qcow2")" = "from-registry-base" ]
 }

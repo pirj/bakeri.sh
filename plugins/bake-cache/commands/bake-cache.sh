@@ -9,10 +9,22 @@
 #   rl bake-cache --rebuild <plugin>    # drop every entry for plugin + all
 #                                       # descendants (whose parent_plugin
 #                                       # is <plugin>); next `rl new` rebuilds.
+#   rl bake-cache --push <oci-ref>      # push every cache entry as
+#                                       # per-layer blobs in one OCI
+#                                       # artifact. Identical blobs across
+#                                       # pushes are dedup'd server-side
+#                                       # by content hash.
+#   rl bake-cache --pull <oci-ref>      # pull an OCI artifact and lay
+#                                       # the entries back out under
+#                                       # $RL_CACHE_DIR.
 #
 # List output is a table: plugin, key (truncated), kind, size, last-modified.
 # Cold entries report disk.qcow2 size. Live entries also include
 # memory.bin alongside the disk.
+#
+# Push / pull require the `oras` CLI on the host (brew install oras /
+# apt install oras). Auth to the registry is whatever oras was last
+# logged into (`oras login ghcr.io -u <user> -p <token>`).
 
 set -euo pipefail
 source "${RL_LIB_DIR}/ui.sh"
@@ -90,12 +102,108 @@ do_rebuild() {
     done
 }
 
+# --- subcommand: --push ----------------------------------------------------
+#
+# Per-layer push: each (plugin, key) entry becomes its own tarball,
+# and all tarballs go into one OCI artifact at <ref>. Identical
+# tarballs are dedup'd server-side by sha256 (oras + the registry's
+# blob mount semantics), so an unchanged layer doesn't re-upload
+# bytes — only its manifest entry changes.
+#
+# The tar root inside each blob is "<plugin>/<key>/<files>" so pull
+# can just untar into $CACHE_DIR without parsing filenames.
+do_push() {
+    local ref="$1"
+    [[ -n "$ref" ]] || { stderr "Usage: rl bake-cache --push <oci-ref>"; exit 2; }
+    command -v oras >/dev/null 2>&1 \
+        || { stderr "Error: oras CLI required. Install: brew install oras / apt install oras"; exit 1; }
+
+    if [[ ! -d "$CACHE_DIR" ]]; then
+        info "Cache empty (no entries at $CACHE_DIR) — nothing to push."
+        return 0
+    fi
+
+    local staging
+    staging=$(mktemp -d)
+    trap "rm -rf '$staging'" EXIT
+
+    local -a artifacts=()
+    local plugin_dir plugin key_dir key tar_name
+    for plugin_dir in "$CACHE_DIR"/*/; do
+        [[ -d "$plugin_dir" ]] || continue
+        plugin=$(basename "$plugin_dir")
+        for key_dir in "$plugin_dir"*/; do
+            [[ -d "$key_dir" ]] || continue
+            key=$(basename "$key_dir")
+            tar_name="${plugin}__${key}.tar.gz"
+            # Tar root inside the blob is `<plugin>/<key>/…`, so pull
+            # untars at $CACHE_DIR and the entry lands at the right
+            # path with no per-file rewriting.
+            tar czf "$staging/$tar_name" -C "$CACHE_DIR" "$plugin/$key"
+            # Custom media type makes the artifact identifiable as
+            # bakerish-specific in registry tooling. Standard OCI
+            # consumers ignore unknown types. Store the basename — oras
+            # is invoked from the staging dir so it resolves the tarball
+            # itself; the `:<media-type>` suffix is parsed by oras.
+            artifacts+=("${tar_name}:application/vnd.bakerish.layer.v1+gzip")
+        done
+    done
+
+    if [[ ${#artifacts[@]} -eq 0 ]]; then
+        info "Cache empty — nothing to push."
+        return 0
+    fi
+
+    info "Pushing ${#artifacts[@]} layers to ${ref}…"
+    ( cd "$staging" && oras push "$ref" \
+        --artifact-type application/vnd.bakerish.cache.v1+json \
+        "${artifacts[@]}" ) || die "oras push failed."
+    info "Push complete."
+}
+
+# --- subcommand: --pull ----------------------------------------------------
+#
+# Pulls the OCI artifact at <ref> and untars every layer blob back
+# under $CACHE_DIR. Idempotent — if an entry already exists locally
+# (same plugin / key), tar overwrites it with the registry version.
+do_pull() {
+    local ref="$1"
+    [[ -n "$ref" ]] || { stderr "Usage: rl bake-cache --pull <oci-ref>"; exit 2; }
+    command -v oras >/dev/null 2>&1 \
+        || { stderr "Error: oras CLI required. Install: brew install oras / apt install oras"; exit 1; }
+
+    local staging
+    staging=$(mktemp -d)
+    trap "rm -rf '$staging'" EXIT
+
+    info "Pulling ${ref}…"
+    oras pull "$ref" -o "$staging" 2>&1 | tail -5 \
+        || die "oras pull failed."
+
+    mkdir -p "$CACHE_DIR"
+    local tar count=0
+    for tar in "$staging"/*.tar.gz; do
+        [[ -f "$tar" ]] || continue
+        tar xzf "$tar" -C "$CACHE_DIR"
+        count=$((count + 1))
+    done
+    if [[ $count -eq 0 ]]; then
+        warn "Pulled artifact contained no layer tarballs (looked for *.tar.gz)."
+        return 0
+    fi
+    info "Pull complete — restored $count layer(s) under $CACHE_DIR."
+}
+
 # --- arg parse -------------------------------------------------------------
 case "${1:-}" in
     --rm)        shift; do_rm      "${1:-}"; exit 0 ;;
     --rm=*)      do_rm      "${1#--rm=}"; exit 0 ;;
     --rebuild)   shift; do_rebuild "${1:-}"; exit 0 ;;
     --rebuild=*) do_rebuild "${1#--rebuild=}"; exit 0 ;;
+    --push)      shift; do_push    "${1:-}"; exit 0 ;;
+    --push=*)    do_push    "${1#--push=}"; exit 0 ;;
+    --pull)      shift; do_pull    "${1:-}"; exit 0 ;;
+    --pull=*)    do_pull    "${1#--pull=}"; exit 0 ;;
 esac
 
 # Default: list.
