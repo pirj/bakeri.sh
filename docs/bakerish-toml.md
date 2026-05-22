@@ -7,7 +7,7 @@ checked into version control.
 `bake run` reads this file on every invocation. Sections inside it
 either:
 
-- override aq/rlock framework defaults (`[memory]`), OR
+- override aq/rlock framework defaults (`[memory]`, `[disk]`), OR
 - declare additional snapshot layers run after the activated plugin
   chain (`[prebuild.<name>]`), OR
 - declare always-run post-restore hooks (`[on_start.<name>]`).
@@ -47,6 +47,23 @@ If `[memory] size` is absent, the framework falls back to the per-
 plugin max (e.g. `docker-compose` declares `memory = "4G"`, so a
 chain including docker-compose ends up at 4G even without this
 section).
+
+Format: `<N>` or `<N>G` (the G suffix is tolerated either way).
+
+### `[disk]`
+
+```toml
+[disk]
+size = "4G"
+```
+
+Overrides the disk size that `aq new --size` is given. rlock's
+default is `16G` — generous for arbitrary CI workloads (large dep
+caches, multiple docker images, build artefacts). Small projects
+(single-service compose fixture, tiny codebase, no large images)
+benefit from dropping to `4G` or `8G`: the base image is sparse so
+the host file is smaller, mkfs runs faster, and CI cache restores
+move less data.
 
 Format: `<N>` or `<N>G` (the G suffix is tolerated either way).
 

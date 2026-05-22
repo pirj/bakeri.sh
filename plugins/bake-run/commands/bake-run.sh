@@ -68,6 +68,7 @@ fi
 SYNTH_DIR="$(pwd)/.bakerish/plugins"
 synthesised=()
 memory_override=""
+size_override=""
 if [[ -f "$(pwd)/bakerish.toml" ]]; then
     mapfile -t synthesised < <(bake_prebuild_synthesize \
         "$(pwd)" "$SYNTH_DIR" \
@@ -75,6 +76,12 @@ if [[ -f "$(pwd)/bakerish.toml" ]]; then
     # `[memory] size = "4G"` overrides the per-plugin max in `rl new`.
     # Empty when absent — passed as nothing.
     memory_override=$(toml_get_in_section "$(pwd)/bakerish.toml" "memory" "size")
+    # `[disk] size = "4G"` overrides rlock's default `--size=16G`.
+    # The default 16G is generous for arbitrary CI workloads; small
+    # projects (single postgres container, tiny code base, no large
+    # docker images) should drop to 4G–8G to save disk on CI cache
+    # restores and warm-path snapshot extraction.
+    size_override=$(toml_get_in_section "$(pwd)/bakerish.toml" "disk" "size")
 fi
 
 # Expose the synthesised plugins to rlock for discovery / resolve_deps.
@@ -102,10 +109,11 @@ if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
         die "No bakeri.sh plugins triggered in $(pwd) and no bakerish.toml [prebuild.*] sections. Need at least one of: Dockerfile, docker-compose.yml, mise.toml, .tool-versions, .ruby-version, .nvmrc — or declare prebuild steps in bakerish.toml."
     fi
     # rl new prompts when no args; passing the activation list makes
-    # it non-interactive. Prepend --memory + --name flags as the
-    # bakerish.toml / --vm-suffix settings call for.
+    # it non-interactive. Prepend --memory + --size + --name flags as
+    # the bakerish.toml / --vm-suffix settings call for.
     rl_new_args=()
     [[ -n "$memory_override" ]] && rl_new_args+=("--memory=$memory_override")
+    [[ -n "$size_override"   ]] && rl_new_args+=("--size=$size_override")
     [[ -n "$VM_SUFFIX"       ]] && rl_new_args+=("--name=$vm_name")
     rl_new_args+=("${activate[@]}")
     rl new "${rl_new_args[@]}"

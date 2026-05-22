@@ -6,6 +6,17 @@ All notable changes to bakeri.sh — one-liner per change.
 
 - (nothing pending)
 
+## v0.1.2 — 2026-05-23
+
+- **`[disk] size`** in `bakerish.toml` now overrides rlock's
+  default `--size=16G`. Mirrors the `[memory] size` pattern: `bake
+  run` reads the field via `toml_get_in_section` and threads it
+  through as `rl new --size=<value>` (rlock v0.1.1 added the flag).
+  Small projects (single-service compose, tiny codebase, no large
+  images) can drop to `4G`–`8G` to save disk on CI cache restores
+  and warm-path snapshot extraction.
+- Docs: `docs/bakerish-toml.md` documents the new `[disk]` section.
+
 ## v0.1.1 — 2026-05-23
 
 - **docker-engine plugin**: add the `rlock` user to the `docker`
