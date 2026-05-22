@@ -6,6 +6,16 @@ All notable changes to bakeri.sh — one-liner per change.
 
 - (nothing pending)
 
+## v0.1.1 — 2026-05-23
+
+- **docker-engine plugin**: add the `rlock` user to the `docker`
+  group during `snapshot_build`. Prebuild commands run as `rlock`
+  (per `bake-prebuild-template.sh`'s `su -l rlock`); without
+  group membership any `docker compose` invocation in a prebuild
+  step failed with `permission denied while trying to connect to
+  the Docker daemon socket`. Snapshot-key suffix bumped v1→v2 to
+  invalidate any cached layers from the broken state.
+
 ## v0.1.0 — 2026-05-21
 
 Initial public release.

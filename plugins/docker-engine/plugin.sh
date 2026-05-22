@@ -5,7 +5,7 @@ source "${RL_LIB_DIR}/ui.sh"
 # Snapshot key = pinned identifier for this installation recipe.
 # Bump the suffix (or include external inputs) when the recipe changes.
 snapshot_key() {
-    printf 'docker-engine-recipe-v1' | sha256sum | cut -d' ' -f1
+    printf 'docker-engine-recipe-v2' | sha256sum | cut -d' ' -f1
 }
 
 snapshot_build() {
@@ -13,6 +13,11 @@ snapshot_build() {
     aq exec "$vm" sh <<'SH'
 set -eu
 apk add docker docker-cli-compose
+# rlock is the unprivileged user prebuild commands run as (see
+# bake-prebuild-template's `su -l rlock`). Without docker-group
+# membership, `docker compose` fails with permission denied on
+# /var/run/docker.sock. addgroup is busybox-compatible.
+addgroup rlock docker
 rc-update add docker boot
 service docker start
 # Wait up to 30s for the daemon socket
