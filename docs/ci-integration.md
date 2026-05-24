@@ -4,7 +4,7 @@ bakeri.sh's headline use case is GitHub Actions. The pattern in this
 doc gets you from "no CI" to "second-run sub-second-warm CI" by
 copy-pasting one workflow file and adapting the test command.
 
-## TL;DR — packaged action (recommended)
+## TL;DR
 
 ```yaml
 name: ci
@@ -14,54 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pirj/setup-bakerish@v1
+      - uses: pirj/setup-bakerish@v2
       - run: bake run -- bundle exec rspec
 ```
 
-`pirj/setup-bakerish@v1` is a composite action that does the install
-+ cache restore + auto-save in one step. See its
+`pirj/setup-bakerish@v2` is a composite action that does the install
+(qemu + ovmf + tio + aq/rlock/bakeri.sh) + cache restore + auto-save
+in one step. See its
 [README](https://github.com/pirj/setup-bakerish) for inputs (cache
 key segmentation, `AQ_NO_SNAPSHOT_COMPRESS=1`, ref pinning, etc.).
-**Currently private during early adoption** — you need access to
-`pirj/setup-bakerish` for `uses:` to resolve. If you don't, use the
-inline form below.
 
-## TL;DR — inline (when you don't have action access)
-
-```yaml
-name: ci
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install qemu + zstd
-        run: sudo apt-get install -y --no-install-recommends qemu-system-x86 zstd
-
-      - name: Install aq / rlock / bakeri.sh
-        run: |
-          git clone --depth=1 https://github.com/pirj/aq        "$HOME/aq"
-          git clone --depth=1 https://github.com/pirj/rlock     "$HOME/rlock"
-          git clone --depth=1 https://github.com/pirj/bakeri.sh "$HOME/bakeri.sh"
-          { echo "$HOME/aq"; echo "$HOME/rlock/bin"; echo "$HOME/bakeri.sh/bin"; } >> "$GITHUB_PATH"
-          echo "RLOCK_PLUGIN_PATH=$HOME/bakeri.sh/plugins" >> "$GITHUB_ENV"
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.local/share/aq/cache
-            ~/.local/share/aq/x86_64
-          key: bakeri-${{ runner.os }}-${{ hashFiles('bakerish.toml', '**/Gemfile.lock', '**/package-lock.json', 'db/schema.rb', 'db/migrate/**', 'Dockerfile', 'docker-compose.*') }}
-          restore-keys: bakeri-${{ runner.os }}-
-
-      - run: bake run -- bundle exec rspec
-```
-
-Full annotated version: see
-[`docs/example-bakerish-ci.yml`](example-bakerish-ci.yml)
-in this repo.
+For the expanded inline form (when you need to customize a step or
+audit what runs under the hood), see
+[`docs/example-bakerish-ci.yml`](example-bakerish-ci.yml) — it
+ships both the packaged form and the unrolled equivalent side by
+side. Don't roll your own host-deps install: at minimum you need
+`qemu-system-x86 qemu-utils ovmf socat wget zstd` plus a
+source-built tio ≥ 3.8 (Ubuntu 24.04 LTS ships tio 2.5).
 
 ## Why this works fast
 
@@ -174,7 +143,7 @@ ephemeral), OCI fallback when the GH cache evicts or misses.
 steps:
   - uses: actions/checkout@v4
 
-  - uses: pirj/setup-bakerish@v1
+  - uses: pirj/setup-bakerish@v2
     with:
       oci-cache-ref: ghcr.io/${{ github.repository_owner }}/bakerish-cache:latest
     env:
