@@ -60,7 +60,7 @@ jobs:
 ```
 
 Full annotated version: see
-[`.github/workflows/example-bakerish-ci.yml`](../.github/workflows/example-bakerish-ci.yml)
+[`docs/example-bakerish-ci.yml`](example-bakerish-ci.yml)
 in this repo.
 
 ## Why this works fast

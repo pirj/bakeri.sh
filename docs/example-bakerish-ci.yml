@@ -1,0 +1,140 @@
+# Reference GitHub Actions workflow for projects using bakeri.sh.
+#
+# Copy-paste this into <your-project>/.github/workflows/ci.yml and
+# adapt the matrix / commands. Lives in docs/ (not .github/workflows/)
+# because it's reference material — bakeri.sh's own repo doesn't run
+# it as CI.
+#
+# Two forms below: the recommended packaged-action form first, then
+# the expanded inline form for projects that want to see every step
+# or can't use the packaged action.
+
+# ─────────────────────────────────────────────────────────────────────
+# Form 1 — packaged action (recommended)
+# ─────────────────────────────────────────────────────────────────────
+# pirj/setup-bakerish bundles the host-prereqs install (qemu, ovmf,
+# tio source-build, etc.), the aq/rlock/bakeri.sh install, and the
+# layer-cache restore+save into one composite step. It is the path
+# that's validated end-to-end on ubuntu-latest; the inline form
+# below is mostly useful for understanding what setup-bakerish does
+# under the hood.
+
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # If your test suite shards, add a matrix here — each shard becomes
+    # its own GH runner = its own VM, but shares the layer cache.
+    # strategy:
+    #   matrix:
+    #     shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pirj/setup-bakerish@v2
+
+      # `bake run` is idempotent: provisions the VM on first call
+      # (using cache layers wherever snapshot_key matches), reuses on
+      # subsequent calls. Exit code of the inner command propagates.
+      #
+      # The first run on a fresh cache pays cold-build wall-clock
+      # (~250 s on the rails-pg-sample fixture). Every subsequent run
+      # on the same cache key is warm (~2.7 s for the chain restore
+      # + the test command's own runtime).
+      - name: Run tests
+        run: bake run -- bundle exec rspec
+        # If you split work into multiple `bake run` calls, they
+        # reuse the same VM by default. Add --vm-suffix=<tag> to fan
+        # out across independent VMs within the same job, e.g.
+        #   bake run --vm-suffix=lint -- rubocop &
+        #   bake run --vm-suffix=test -- rspec  &
+        #   wait
+        # Each suffixed VM has its own state and cache slot.
+
+# ─────────────────────────────────────────────────────────────────────
+# Form 2 — expanded inline (for understanding / customization)
+# ─────────────────────────────────────────────────────────────────────
+# Equivalent to the above but with setup-bakerish unrolled. Use this
+# form when you need to customize one of the steps (e.g. add an
+# extra cache path, pin a different aq version, build tio from a
+# different source). For everything else, prefer Form 1.
+#
+#   steps:
+#     - uses: actions/checkout@v4
+#
+#     # Host prereqs. Without `ovmf` aq's detect_host fails fast on
+#     # Linux (even though direct-kernel boot is the actual VM path).
+#     # tio >= 3.8 is required by aq's serial driver; Ubuntu 24.04 LTS
+#     # ships tio 2.5, so we build from source.
+#     - name: Install host prereqs
+#       run: |
+#         sudo apt-get update -qq
+#         sudo apt-get install -y --no-install-recommends \
+#           qemu-system-x86 qemu-utils ovmf socat wget zstd \
+#           meson ninja-build pkg-config \
+#           liblua5.4-dev libinih-dev libglib2.0-dev gcc
+#         # Build tio v3.9 from source (Ubuntu 24.04 LTS ships 2.5).
+#         git clone --depth=1 --branch v3.9 https://github.com/tio/tio /tmp/tio
+#         (cd /tmp/tio && meson setup build && meson compile -C build && sudo meson install -C build)
+#
+#     - name: Install aq / rlock / bakeri.sh
+#       run: |
+#         git clone --depth=1 https://github.com/pirj/aq        "$HOME/aq"
+#         git clone --depth=1 https://github.com/pirj/rlock     "$HOME/rlock"
+#         git clone --depth=1 https://github.com/pirj/bakeri.sh "$HOME/bakeri.sh"
+#         {
+#           echo "$HOME/aq"
+#           echo "$HOME/rlock/bin"
+#           echo "$HOME/bakeri.sh/bin"
+#         } >> "$GITHUB_PATH"
+#         echo "RLOCK_PLUGIN_PATH=$HOME/bakeri.sh/plugins" >> "$GITHUB_ENV"
+#
+#     # Layer cache. Key derives from every file influencing a
+#     # snapshot_key: bakerish.toml + common lockfiles + key_files
+#     # from [prebuild.*] sections. Partial restore via restore-keys
+#     # is safe — the framework re-checks each layer independently.
+#     - name: Restore bakeri.sh layer cache
+#       id: cache-restore
+#       uses: actions/cache/restore@v4
+#       with:
+#         path: |
+#           ~/.local/share/aq/cache
+#           ~/.local/share/aq/x86_64
+#         key: |
+#           bakeri-${{ runner.os }}-${{ hashFiles(
+#             'bakerish.toml',
+#             '**/Gemfile.lock',
+#             '**/package-lock.json',
+#             '**/pnpm-lock.yaml',
+#             '**/uv.lock',
+#             '**/poetry.lock',
+#             '**/Cargo.lock',
+#             'db/schema.rb',
+#             'db/migrate/**',
+#             'Dockerfile',
+#             'docker-compose.*'
+#           ) }}
+#         restore-keys: |
+#           bakeri-${{ runner.os }}-
+#
+#     - run: bake run -- bundle exec rspec
+#
+#     # Save the cache. Always-save (`if: always()`) lets us cache
+#     # partial progress even when tests fail.
+#     - name: Save bakeri.sh layer cache
+#       if: always() && steps.cache-restore.outputs.cache-hit != 'true'
+#       uses: actions/cache/save@v4
+#       with:
+#         path: |
+#           ~/.local/share/aq/cache
+#           ~/.local/share/aq/x86_64
+#         key: ${{ steps.cache-restore.outputs.cache-primary-key }}

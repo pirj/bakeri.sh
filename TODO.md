@@ -12,7 +12,8 @@ below is scored against "does this make GH Actions CI faster / easier".
 
 - [done 2026-05-21, commit 532644c] **Cross-machine snapshot transport
   via `actions/cache`** + the reference workflow
-  `.github/workflows/example-bakerish-ci.yml`. Both shipped together.
+  `docs/example-bakerish-ci.yml` (moved out of `.github/workflows/`
+  on 2026-05-25 — it was a docs example, not bakeri.sh's own CI).
   The cache dir `~/.local/share/aq/cache/` round-trips between CI
   runs; second-and-later runs hit sub-second-warm.
 - [done 2026-05-21, https://github.com/pirj/setup-bakerish] **Packaged
