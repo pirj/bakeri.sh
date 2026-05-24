@@ -1,0 +1,46 @@
+# bakeri.sh's bats test suite. Pure-bash unit tests (no VM boots,
+# no qemu, no kvm) — they assert against plugin.toml declarations
+# and exercise plugin.sh / lib/*.sh functions in isolation. Fast
+# (~seconds), runs on any Linux + bash 5 + bats 1.x.
+#
+# Sibling rlock checkout is pinned to v0.1.3 (matches
+# setup-bakerish@v2's default and the local dev layout described
+# in test/test_helper/common.bash). Bump when bakeri.sh starts
+# depending on a newer rlock — TODO has the "rolling rlock-main
+# matrix" follow-up if we want regression coverage too.
+
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bakeri.sh
+
+      - name: Checkout rlock (framework dep)
+        uses: actions/checkout@v4
+        with:
+          repository: pirj/rlock
+          ref: v0.1.3
+          path: rlock
+
+      - name: Install bats
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bats
+
+      - name: Run bats
+        working-directory: bakeri.sh
+        env:
+          RL_FRAMEWORK_DIR: ${{ github.workspace }}/rlock
+        run: bats test/

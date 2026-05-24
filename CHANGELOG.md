@@ -4,7 +4,10 @@ All notable changes to bakeri.sh — one-liner per change.
 
 ## Unreleased
 
-- (nothing pending)
+- **CI**: `.github/workflows/ci.yml` runs the bats suite (125
+  tests, ~seconds wall-clock) on push/PR. Pure-bash unit tests
+  against plugin.toml + lib functions — no VM boots, no qemu, no
+  kvm. Sibling rlock checkout pinned to v0.1.3.
 
 ## v0.1.2 — 2026-05-23
 
