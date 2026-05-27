@@ -67,6 +67,9 @@ bake_prebuild_synthesize() {
         cmd=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "cmd")
         strategy=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "strategy")
         strategy="${strategy:-cached}"
+        kind=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "kind")
+        kind="${kind:-cold}"
+        memory=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "memory")
         key_files=()
         local kf
         while IFS= read -r kf; do
@@ -81,6 +84,13 @@ bake_prebuild_synthesize() {
             echo "Error: bakerish.toml [prebuild.$section] missing required 'key_files' (or empty)." >&2
             return 1
         fi
+        case "$kind" in
+            cold|live) ;;
+            *)
+                echo "Error: bakerish.toml [prebuild.$section] has invalid 'kind' = '$kind' (expected cold|live)." >&2
+                return 1
+                ;;
+        esac
 
         # plugin.toml
         {
@@ -97,7 +107,13 @@ bake_prebuild_synthesize() {
             printf '\n'
             printf '[snapshot]\n'
             printf 'strategy = "%s"\n' "$strategy"
-            printf 'kind = "cold"\n'
+            printf 'kind = "%s"\n' "$kind"
+            # Memory hint surfaces only on live layers — cold layers
+            # don't pin RAM. Skip emitting the field if cold to avoid
+            # surfacing a no-op knob in the synthesised manifest.
+            if [[ "$kind" == "live" && -n "$memory" ]]; then
+                printf 'memory = "%s"\n' "$memory"
+            fi
         } > "$plugin_dir/plugin.toml"
 
         # cmd.sh — verbatim user shell. Wrapping `set -eu` at the top

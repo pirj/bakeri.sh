@@ -1,0 +1,47 @@
+# rails-pg-sample fixture — multi-live-layer config for benchmarking
+# the AQ_MEMORY_SNAPSHOT=zstd-patch path (rlock v0.1.6 / aq v2.5.34).
+#
+# Chain (after auto-detection picks up docker-engine + docker-compose):
+#
+#   _base (cold) → docker-engine (cold) → docker-compose (live)
+#                                       → pg-prewarm (live)
+#                                       → schema-loaded (live)
+#
+# Three live layers in a row: docker-compose, pg-prewarm,
+# schema-loaded. The latter two are designed so each modifies a
+# *small* fraction of guest RAM (a few hundred MB of buffer pool +
+# a few KB of schema rows). That's the workload `--patch-from`
+# was designed for — most pages are identical to the parent
+# layer's memory, only the deltas are stored.
+#
+# Note on single-line cmd: bakeri.sh's TOML reader (rlock's
+# lib/toml.sh) handles only single-line `key = "value"` form.
+# TOML's triple-quoted multi-line strings aren't supported. So
+# multi-step shells are chained with `&&` (fail fast) or `; `
+# (run regardless) on one line.
+
+[disk]
+size = "4G"
+
+[memory]
+size = "4G"
+
+# Layer N+1: warm postgres' shared buffer cache. Issues a series
+# of SELECTs against pg_catalog so catalog index pages + the
+# shared_buffers page directory are resident. Memory delta vs
+# parent (compose-just-started): a few hundred MB of buffer pool,
+# mostly catalog + index pages.
+[prebuild.pg-prewarm]
+kind = "live"
+memory = "4G"
+cmd = "docker compose exec -T db psql -U postgres -c 'SELECT count(*) FROM pg_class; SELECT count(*) FROM pg_attribute; SELECT count(*) FROM pg_proc; CHECKPOINT;' && echo prewarmed > /home/rlock/repo/.pg-prewarm"
+key_files = ["docker-compose.yml"]
+
+# Layer N+2: create application schema + seed data. Modest delta:
+# new heap pages for the created tables + 1000 inserted rows + WAL
+# flush. ~10-50 MB of changed pages vs the prewarmed parent.
+[prebuild.schema-loaded]
+kind = "live"
+memory = "4G"
+cmd = "docker compose exec -T db psql -U postgres -c 'CREATE TABLE IF NOT EXISTS bench_items (id SERIAL PRIMARY KEY, payload TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now()); INSERT INTO bench_items (payload) SELECT md5(g::text) FROM generate_series(1, 1000) g; CHECKPOINT;' && echo loaded > /home/rlock/repo/.schema-loaded"
+key_files = ["docker-compose.yml"]
