@@ -47,22 +47,32 @@ jobs:
         with:
           path: snapcompose
 
-      - name: Install host packages (qemu) + KVM access + zstd 1.5.7
+      - name: Install host packages + KVM access + zstd 1.5.7 + tio
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf socat
-          # zstd 1.5.5 (Ubuntu 24.04 default) has a bug in --patch-from
-          # that produces invalid patches for our ~1.7 GiB memory refs
-          # under --long=31 — the patch decoder trips "Restored data
-          # doesn't match checksum" even though encode/decode refs are
-          # byte-identical (verified by PATCH_DIAG sha256). Fixed in
-          # 1.5.6. Install 1.5.7 from facebook/zstd's binary release.
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils ovmf socat \
+            meson ninja-build pkg-config liblua5.4-dev libinih-dev libglib2.0-dev gcc
+          # tio (serial terminal that aq's bootstrap_base_image scripts)
+          # — not packaged on Ubuntu LTS, build from source. Mirrors
+          # setup-snapcompose@v3.
+          TIO_VERSION=3.9
+          curl -sSL "https://github.com/tio/tio/archive/refs/tags/v${TIO_VERSION}.tar.gz" \
+            | tar xz -C "$HOME"
+          (
+            cd "$HOME/tio-${TIO_VERSION}"
+            meson setup build --prefix=/usr/local
+            meson compile -C build
+            sudo meson install -C build
+          )
+          # zstd 1.5.5 (Ubuntu 24.04 default) has a --patch-from bug for
+          # ~1.7 GiB refs under --long=31 — see setup-snapcompose action.
+          # Build 1.5.7 from source.
           ZSTD_VER=1.5.7
-          curl -fsSL "https://github.com/facebook/zstd/releases/download/v${ZSTD_VER}/zstd-${ZSTD_VER}.tar.gz" \
+          curl -fsSL "https://github.com/facebook/zstd/archive/refs/tags/v${ZSTD_VER}.tar.gz" \
             | tar -xz -C "$HOME"
           (cd "$HOME/zstd-${ZSTD_VER}" && make -j zstd HAVE_PTHREAD=1 >/dev/null 2>&1)
           sudo install -m 0755 "$HOME/zstd-${ZSTD_VER}/programs/zstd" /usr/local/bin/zstd
-          # pzstd is built separately under contrib/pzstd
           (cd "$HOME/zstd-${ZSTD_VER}/contrib/pzstd" && make -j pzstd >/dev/null 2>&1) || true
           if [ -f "$HOME/zstd-${ZSTD_VER}/contrib/pzstd/pzstd" ]; then
             sudo install -m 0755 "$HOME/zstd-${ZSTD_VER}/contrib/pzstd/pzstd" /usr/local/bin/pzstd
