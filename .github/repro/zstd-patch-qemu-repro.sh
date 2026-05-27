@@ -81,7 +81,7 @@ echo "=== fill guest RAM with random data via serial ==="
 (
   printf '\nroot\n'
   sleep 1
-  printf 'dd if=/dev/urandom of=/tmp/fill bs=1M count=2000 status=none && echo FILL_OK\n'
+  printf 'dd if=/dev/urandom of=/tmp/fill bs=1M count=1400 status=none && echo FILL_OK\n'
   sleep 30
   printf 'free -m | head -3\n'
   sleep 1
