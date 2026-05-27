@@ -61,7 +61,7 @@ echo
 
 echo "=== boot Alpine VM (2 GiB RAM) ==="
 "$QEMU" \
-  -machine $QEMU_MACHINE -accel $ACCEL -cpu host -m 2G \
+  -machine $QEMU_MACHINE -accel $ACCEL -cpu host -m 4G \
   -cdrom "$ALPINE_ISO" \
   -nic user,model=virtio-net-pci \
   -qmp unix:"$QMP_SOCK",server=on,wait=off \
@@ -70,8 +70,23 @@ echo "=== boot Alpine VM (2 GiB RAM) ==="
   -daemonize -pidfile "$VM_DIR/qemu.pid"
 
 echo "qemu pid: $(cat "$VM_DIR/qemu.pid")"
-echo "wait 25s for Alpine ISO to boot"
-sleep 25
+echo "wait 30s for Alpine ISO to boot"
+sleep 30
+
+# Fill guest tmpfs (`/`) with ~2 GiB of non-zero data so the captured
+# memory.bin is large enough to trigger the bug (Alpine ISO idle =
+# ~175 MiB after qemu's zero-page elimination; we need >1 GiB
+# allocated RAM).
+echo "=== fill guest RAM with random data via serial ==="
+(
+  printf '\nroot\n'
+  sleep 1
+  printf 'dd if=/dev/urandom of=/tmp/fill bs=1M count=2000 status=none && echo FILL_OK\n'
+  sleep 30
+  printf 'free -m | head -3\n'
+  sleep 1
+) | timeout 60 socat - UNIX-CONNECT:"$SERIAL_SOCK" 2>&1 | tail -10
+echo
 
 echo
 echo "=== capture memory via qmp migrate file: ==="
