@@ -16,12 +16,20 @@ To be filed at https://github.com/facebook/zstd/issues/new?template=bug_report.m
 
 Encoder and decoder run consecutively on the same machine, against the same on-disk reference (verified byte-identical via `sha256sum` on both sides — `e6b527233120bf21640fef82dd8d10fc7ab2142bb15928f2a4e3d169adf3c14a` in our case). The reference is a 1.6–1.7 GiB QEMU live-snapshot memory dump; the target differs by a ~5–10 MiB region near the middle.
 
-The same code path (same zstd binary, same flags, same reference + target sizes) **passes** on macOS aarch64 Homebrew zstd 1.5.7 against an identical workload. **Reproduces on**:
-- Ubuntu 24.04 + apt zstd 1.5.5
-- Ubuntu 24.04 + facebook/zstd v1.5.7 built from source
-- Ubuntu 22.04 + apt zstd (older)
+**Triangulation table** (all four with `zstd 1.5.7`, same 1.65 GiB memory dump, same `zstd -q --long=31 --patch-from=ref new -o patch` + `zstd -d --long=31 --patch-from=ref patch -o out` round-trip):
 
-**Reproduction is workload-sensitive.** Synthetic inputs do NOT reproduce; the bug requires a specific qemu memory pattern:
+| Platform | CPU path | Result |
+|---|---|---|
+| macOS aarch64 (M3) brew zstd 1.5.7 | aarch64 native (Apple Silicon) | **PASS** |
+| Linux aarch64 Alpine (HVF guest on M3) zstd 1.5.7 | aarch64 native | **PASS** |
+| Linux x86_64 Alpine **TCG-emulated** on M3 zstd 1.5.7 | TCG translated x86_64 | **PASS** |
+| Linux x86_64 Alpine **KVM** on Azure CI zstd 1.5.5 + 1.5.7 | x86_64 native (Intel/AMD) | **FAIL** |
+
+The TCG row is the smoking gun: same `zstd 1.5.7` x86_64 ELF binary, same memory file, same Linux Alpine guest setup, same QEMU host process. The only thing that differs is whether the underlying CPU runs native x86_64 SIMD instructions or TCG's scalar translation of them. TCG passes; native fails.
+
+**This points to a bug in zstd's x86_64-native SIMD code path** (LDM or patch-from), not the format itself.
+
+**Reproduction is also workload-sensitive.** Synthetic inputs do NOT reproduce, even on the same x86_64 native runner:
 - 1.7 GiB random data + 5 MiB delta + --long=31 → **passes** on all platforms.
 - 1.7 GiB ~60% zero pages + ~30% repeating pages + ~10% random + 5 MiB delta + --long=31 → **passes** on all platforms.
 - Real Alpine ISO live-boot memory dump (~175 MiB) + 5 MiB delta + --long=31 → **passes** on all platforms.
