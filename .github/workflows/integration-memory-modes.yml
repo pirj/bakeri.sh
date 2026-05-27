@@ -1,0 +1,112 @@
+# End-to-end integration test against the rails-pg-sample fixture
+# under each of the three AQ_MEMORY_SNAPSHOT modes. One job per mode
+# so a failure in one doesn't block diagnosis of the others. Tests
+# the CURRENT snapcompose checkout against pinned aq + rlock
+# releases — catches breakage in snapcompose itself before it
+# reaches setup-snapcompose's release pin.
+#
+# Each job:
+#   1. Installs qemu + zstd via apt.
+#   2. Downloads pinned pirj/aq and pirj/rlock release tarballs.
+#   3. Uses snapcompose from THIS checkout (not a released tag).
+#   4. Runs `snapc run -- bash -c '... ls sentinel files ...'`
+#      with AQ_MEMORY_SNAPSHOT=<mode>.
+#   5. Passes if sentinel files exist (means cold build + each live
+#      layer's prebuild ran successfully).
+#
+# Wall-clock per job: ~3-5 min on ubuntu-latest. The matrix runs in
+# parallel so total wall-clock ≈ slowest job.
+
+name: integration-memory-modes
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AQ_VERSION: 'v2.5.38'
+  RLOCK_VERSION: 'v0.1.10'
+
+jobs:
+  memory-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [raw, zstd, zstd-patch]
+    name: ${{ matrix.mode }}
+    steps:
+      - name: Checkout snapcompose (this PR's code)
+        uses: actions/checkout@v4
+        with:
+          path: snapcompose
+
+      - name: Install host packages (qemu + zstd)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 zstd ovmf
+
+      - name: Download pinned aq release
+        run: |
+          curl -fsSL "https://github.com/pirj/aq/archive/refs/tags/${AQ_VERSION}.tar.gz" \
+            | tar -xz -C "$HOME"
+          mv "$HOME/aq-${AQ_VERSION#v}" "$HOME/aq"
+          echo "$HOME/aq" >> "$GITHUB_PATH"
+
+      - name: Download pinned rlock release
+        run: |
+          curl -fsSL "https://github.com/pirj/rlock/archive/refs/tags/${RLOCK_VERSION}.tar.gz" \
+            | tar -xz -C "$HOME"
+          mv "$HOME/rlock-${RLOCK_VERSION#v}" "$HOME/rlock"
+          echo "$HOME/rlock/bin" >> "$GITHUB_PATH"
+
+      - name: Wire snapcompose from this checkout
+        run: |
+          echo "$GITHUB_WORKSPACE/snapcompose/bin" >> "$GITHUB_PATH"
+          echo "RLOCK_PLUGIN_PATH=$GITHUB_WORKSPACE/snapcompose/plugins" >> "$GITHUB_ENV"
+
+      - name: Run snapc against the rails-pg-sample fixture
+        env:
+          AQ_MEMORY_SNAPSHOT: ${{ matrix.mode }}
+          AQ_TIMING: '1'
+        working-directory: snapcompose/test/fixtures/rails-pg-sample
+        run: |
+          set -e
+          echo "=== AQ_MEMORY_SNAPSHOT=$AQ_MEMORY_SNAPSHOT ==="
+          t0=$EPOCHREALTIME
+          snapc run -- bash -c '
+            set -e
+            ls -l /home/rlock/repo/.pg-prewarm /home/rlock/repo/.schema-loaded
+            cat /home/rlock/repo/.pg-prewarm /home/rlock/repo/.schema-loaded
+          '
+          t1=$EPOCHREALTIME
+          ms=$(awk "BEGIN { printf \"%.0f\", ($t1 - $t0) * 1000 }")
+          echo "COLD_${AQ_MEMORY_SNAPSHOT}_MS=$ms"
+
+      - name: Cache layout summary
+        if: always()
+        run: |
+          echo "=== ~/.local/share/aq/cache ==="
+          du -sh ~/.local/share/aq/cache 2>/dev/null || echo "(no cache)"
+          if [ -d ~/.local/share/aq/cache ]; then
+            for d in ~/.local/share/aq/cache/*/*/; do
+              [ -d "$d" ] || continue
+              plugin=$(basename "$(dirname "$d")")
+              key=$(basename "$d" | cut -c1-12)
+              size=$(du -sh "$d" | awk '{print $1}')
+              fmt="(no memory)"
+              for f in memory.bin memory.bin.zst memory.bin.zstpatch; do
+                if [ -f "$d/$f" ]; then
+                  fmt="$f $(stat -c %s "$d/$f")B"
+                  break
+                fi
+              done
+              printf '  %-26s %s  total=%-7s %s\n' "$plugin" "$key" "$size" "$fmt"
+            done
+          fi
