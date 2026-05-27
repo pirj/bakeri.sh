@@ -1,0 +1,59 @@
+# Standalone repro for the zstd --patch-from corruption we hit at
+# R18 cold-zstd-patch on ubuntu-latest. Generates a 1.7 GiB random
+# reference + 5 MiB delta, runs encode+decode, verifies round-trip.
+#
+# Three runner combinations to triangulate:
+#   - ubuntu-24.04 + apt zstd (1.5.5)
+#   - ubuntu-24.04 + source-built zstd 1.5.7
+#   - macos-latest + brew zstd (1.5.7)
+#
+# Outcome guides the bug report:
+#   - All three pass → bug is workload-specific (not random data).
+#     Need real qemu memory dump in the repro.
+#   - Ubuntu fails, macOS passes → repro is sufficient for upstream
+#     bug, with platform-distinguished output.
+#   - All three fail → upstream bug across platforms, even simpler
+#     bug report.
+
+name: zstd-patch-from-repro
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu-apt-zstd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install apt zstd + run repro
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd coreutils
+          zstd --version
+          bash <(curl -fsSL https://raw.githubusercontent.com/pirj/snapcompose/main/.github/repro/zstd-patch-from-repro.sh)
+
+  ubuntu-source-zstd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build zstd 1.5.7 from source
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq coreutils gcc make
+          ZSTD_VER=1.5.7
+          curl -fsSL "https://github.com/facebook/zstd/archive/refs/tags/v${ZSTD_VER}.tar.gz" \
+            | tar -xz -C "$HOME"
+          (cd "$HOME/zstd-${ZSTD_VER}" && make -j zstd HAVE_PTHREAD=1 >/dev/null 2>&1)
+          sudo install -m 0755 "$HOME/zstd-${ZSTD_VER}/programs/zstd" /usr/local/bin/zstd
+          zstd --version
+      - name: Run repro
+        run: bash .github/repro/zstd-patch-from-repro.sh
+
+  macos-brew-zstd:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install brew zstd + run repro
+        run: |
+          brew install zstd coreutils
+          zstd --version
+          bash .github/repro/zstd-patch-from-repro.sh
