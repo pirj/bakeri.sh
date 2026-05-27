@@ -73,6 +73,20 @@ jobs:
       - name: Run qemu repro
         run: bash .github/repro/zstd-patch-qemu-repro.sh
 
+  # Triangulation: same OS (Linux) different ISA. If x86_64 (above)
+  # fails but aarch64 passes on identical workload, the bug is in
+  # zstd's x86_64 codegen / SIMD path of LDM or patch-from.
+  ubuntu-arm-apt-zstd:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install apt zstd + run synthetic repro
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd coreutils
+          zstd --version
+          uname -m
+          bash <(curl -fsSL https://raw.githubusercontent.com/pirj/snapcompose/main/.github/repro/zstd-patch-from-repro.sh)
+
   qemu-real-memory-macos:
     runs-on: macos-latest
     steps:
