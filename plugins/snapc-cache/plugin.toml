@@ -1,8 +1,8 @@
-description = "Inspect bakeri.sh's layered snapshot cache: per-plugin entries, sizes, kinds"
+description = "Inspect snapcompose's layered snapshot cache: per-plugin entries, sizes, kinds"
 protocol_version = "1"
 deps = []
 host_deps = []
 # Command-only plugin; framework dispatch_command falls back to all
 # discoverable plugins for command lookup.
 triggers = []
-commands = ["bake-cache"]
+commands = ["snapc-cache"]

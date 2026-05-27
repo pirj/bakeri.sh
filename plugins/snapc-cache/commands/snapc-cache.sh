@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# bake-cache — manage bakeri.sh's snapshot framework cache.
+# snapc-cache — manage snapcompose's snapshot framework cache.
 #
 # Usage:
-#   rl bake-cache                       # list all cached entries (default)
-#   rl bake-cache --rm <plugin>         # remove every entry for a plugin
-#   rl bake-cache --rm <plugin>:<key>   # remove one specific entry
-#   rl bake-cache --rebuild <plugin>    # drop every entry for plugin + all
+#   rl snapc-cache                       # list all cached entries (default)
+#   rl snapc-cache --rm <plugin>         # remove every entry for a plugin
+#   rl snapc-cache --rm <plugin>:<key>   # remove one specific entry
+#   rl snapc-cache --rebuild <plugin>    # drop every entry for plugin + all
 #                                       # descendants (whose parent_plugin
 #                                       # is <plugin>); next `rl new` rebuilds.
-#   rl bake-cache --push <oci-ref>      # push every cache entry as
+#   rl snapc-cache --push <oci-ref>      # push every cache entry as
 #                                       # per-layer blobs in one OCI
 #                                       # artifact. Identical blobs across
 #                                       # pushes are dedup'd server-side
 #                                       # by content hash.
-#   rl bake-cache --pull <oci-ref>      # pull an OCI artifact and lay
+#   rl snapc-cache --pull <oci-ref>      # pull an OCI artifact and lay
 #                                       # the entries back out under
 #                                       # $RL_CACHE_DIR.
 #
@@ -39,7 +39,7 @@ do_rm() {
     if [[ "$target" == *:* ]]; then
         key="${target#*:}"
     fi
-    [[ -n "$plugin" ]] || { stderr "Usage: rl bake-cache --rm <plugin>[:<key>]"; exit 2; }
+    [[ -n "$plugin" ]] || { stderr "Usage: rl snapc-cache --rm <plugin>[:<key>]"; exit 2; }
 
     local plugin_dir="$CACHE_DIR/$plugin"
     if [[ ! -d "$plugin_dir" ]]; then
@@ -72,7 +72,7 @@ do_rm() {
 # parent snapshot.
 do_rebuild() {
     local plugin="$1"
-    [[ -n "$plugin" ]] || { stderr "Usage: rl bake-cache --rebuild <plugin>"; exit 2; }
+    [[ -n "$plugin" ]] || { stderr "Usage: rl snapc-cache --rebuild <plugin>"; exit 2; }
 
     if [[ ! -d "$CACHE_DIR/$plugin" ]]; then
         info "No cache entries for plugin '$plugin'."
@@ -114,7 +114,7 @@ do_rebuild() {
 # can just untar into $CACHE_DIR without parsing filenames.
 do_push() {
     local ref="$1"
-    [[ -n "$ref" ]] || { stderr "Usage: rl bake-cache --push <oci-ref>"; exit 2; }
+    [[ -n "$ref" ]] || { stderr "Usage: rl snapc-cache --push <oci-ref>"; exit 2; }
     command -v oras >/dev/null 2>&1 \
         || { stderr "Error: oras CLI required. Install: brew install oras / apt install oras"; exit 1; }
 
@@ -141,11 +141,11 @@ do_push() {
             # path with no per-file rewriting.
             tar czf "$staging/$tar_name" -C "$CACHE_DIR" "$plugin/$key"
             # Custom media type makes the artifact identifiable as
-            # bakerish-specific in registry tooling. Standard OCI
+            # snapcompose-specific in registry tooling. Standard OCI
             # consumers ignore unknown types. Store the basename — oras
             # is invoked from the staging dir so it resolves the tarball
             # itself; the `:<media-type>` suffix is parsed by oras.
-            artifacts+=("${tar_name}:application/vnd.bakerish.layer.v1+gzip")
+            artifacts+=("${tar_name}:application/vnd.snapcompose.layer.v1+gzip")
         done
     done
 
@@ -156,7 +156,7 @@ do_push() {
 
     info "Pushing ${#artifacts[@]} layers to ${ref}…"
     ( cd "$staging" && oras push "$ref" \
-        --artifact-type application/vnd.bakerish.cache.v1+json \
+        --artifact-type application/vnd.snapcompose.cache.v1+json \
         "${artifacts[@]}" ) || die "oras push failed."
     info "Push complete."
 }
@@ -168,7 +168,7 @@ do_push() {
 # (same plugin / key), tar overwrites it with the registry version.
 do_pull() {
     local ref="$1"
-    [[ -n "$ref" ]] || { stderr "Usage: rl bake-cache --pull <oci-ref>"; exit 2; }
+    [[ -n "$ref" ]] || { stderr "Usage: rl snapc-cache --pull <oci-ref>"; exit 2; }
     command -v oras >/dev/null 2>&1 \
         || { stderr "Error: oras CLI required. Install: brew install oras / apt install oras"; exit 1; }
 

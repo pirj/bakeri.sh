@@ -4,7 +4,7 @@ deps = []
 host_deps = []
 # No triggers — this is a command-only plugin. The rlock framework's
 # dispatch_command falls back to all discoverable plugins when looking
-# for a command, so `rl bake-run` works without bake-run needing to
+# for a command, so `rl snapc-run` works without snapc-run needing to
 # appear in ACTIVE_PLUGINS via a file trigger.
 triggers = []
-commands = ["bake-run"]
+commands = ["snapc-run"]

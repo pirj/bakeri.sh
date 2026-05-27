@@ -2,7 +2,7 @@
 #
 # docker-registry-cache — host-side Docker registry pull-through cache.
 #
-# Why: bakeri.sh's docker-compose cold pull dominates cold path (~60 s
+# Why: snapcompose's docker-compose cold pull dominates cold path (~60 s
 # on a typical Rails+PG fixture). The pull happens INSIDE the guest VM,
 # so the host's docker daemon has no shared image cache and every fresh
 # project on the host pays the same network cost again.
@@ -19,7 +19,7 @@
 #   * snapshot_build (per-VM, once per cached state): write daemon.json
 #     in the guest pointing at 10.0.2.2:5000, restart dockerd.
 #   * rm hook: leave the host registry running — it's shared across
-#     bakeri.sh projects on this host.
+#     snapcompose projects on this host.
 #
 # Mirror runs on http://127.0.0.1:5000 on the host. Inside the VM,
 # 10.0.2.2 is the host (QEMU user-mode NAT gateway).
@@ -46,7 +46,7 @@ snapshot_should_skip() {
 
 # Fixed-content recipe: the registry config + guest daemon.json don't
 # depend on project state. One cached layer is shared across every
-# bakeri.sh project on the host.
+# snapcompose project on the host.
 snapshot_key() {
     printf 'docker-registry-cache-recipe-%s-%s' "$RECIPE_VERSION" "$REGISTRY_UPSTREAM" \
         | sha256sum | cut -d' ' -f1
@@ -137,7 +137,7 @@ start() {
 }
 
 # Leave the host registry running on `rl rm` — it's shared across every
-# bakeri.sh project on the host. User stops manually if needed.
+# snapcompose project on the host. User stops manually if needed.
 rm() {
     # shellcheck disable=SC2034
     local vm="$1"

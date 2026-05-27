@@ -3,8 +3,8 @@
 setup() {
     load 'test_helper/common'
     _common_setup
-    PLUGIN_DIR="$PROJECT_ROOT/plugins/bake-cache"
-    CMD="$PLUGIN_DIR/commands/bake-cache.sh"
+    PLUGIN_DIR="$PROJECT_ROOT/plugins/snapc-cache"
+    CMD="$PLUGIN_DIR/commands/snapc-cache.sh"
 
     # Provide minimal stub ui.sh so the script can source it without
     # depending on the framework runtime.
@@ -21,23 +21,23 @@ STUB
     mkdir -p "$CACHE_DIR"
 }
 
-@test "bake-cache plugin declares the bake-cache command" {
-    run grep -q 'commands *= *\["bake-cache"\]' "$PLUGIN_DIR/plugin.toml"
+@test "snapc-cache plugin declares the snapc-cache command" {
+    run grep -q 'commands *= *\["snapc-cache"\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
 
-@test "bake-cache plugin has no [snapshot] section (command-only)" {
+@test "snapc-cache plugin has no [snapshot] section (command-only)" {
     run grep -q '^\[snapshot\]' "$PLUGIN_DIR/plugin.toml"
     assert_failure
 }
 
-@test "bake-cache prints 'Cache empty' when no entries" {
+@test "snapc-cache prints 'Cache empty' when no entries" {
     run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD"
     assert_success
     assert_output --partial "Cache empty"
 }
 
-@test "bake-cache lists a cold entry with disk size and no memory" {
+@test "snapc-cache lists a cold entry with disk size and no memory" {
     local entry="$CACHE_DIR/ruby-bundler/abc123"
     mkdir -p "$entry"
     dd if=/dev/zero of="$entry/disk.qcow2" bs=1024 count=10 2>/dev/null
@@ -54,7 +54,7 @@ M
     [[ "$output" == *"-"* ]]
 }
 
-@test "bake-cache lists a live entry with disk + memory sizes" {
+@test "snapc-cache lists a live entry with disk + memory sizes" {
     local entry="$CACHE_DIR/docker-compose/def456"
     mkdir -p "$entry"
     dd if=/dev/zero of="$entry/disk.qcow2" bs=1024 count=10 2>/dev/null
@@ -70,7 +70,7 @@ M
     assert_output --partial "live"
 }
 
-@test "bake-cache shows last-prune line when log exists" {
+@test "snapc-cache shows last-prune line when log exists" {
     local entry="$CACHE_DIR/p/k"
     mkdir -p "$entry"
     dd if=/dev/zero of="$entry/disk.qcow2" bs=1024 count=1 2>/dev/null
@@ -81,7 +81,7 @@ M
     assert_output --partial "Last prune: Pruned 3"
 }
 
-@test "bake-cache --rm <plugin> drops every entry for that plugin" {
+@test "snapc-cache --rm <plugin> drops every entry for that plugin" {
     mkdir -p "$CACHE_DIR/ruby-bundler/k1" "$CACHE_DIR/ruby-bundler/k2" "$CACHE_DIR/npm/k1"
     touch "$CACHE_DIR/ruby-bundler/k1/disk.qcow2" \
           "$CACHE_DIR/ruby-bundler/k2/disk.qcow2" \
@@ -93,7 +93,7 @@ M
     [ -f "$CACHE_DIR/npm/k1/disk.qcow2" ]
 }
 
-@test "bake-cache --rm <plugin>:<key> drops one entry only" {
+@test "snapc-cache --rm <plugin>:<key> drops one entry only" {
     mkdir -p "$CACHE_DIR/ruby-bundler/k1" "$CACHE_DIR/ruby-bundler/k2"
     touch "$CACHE_DIR/ruby-bundler/k1/disk.qcow2" \
           "$CACHE_DIR/ruby-bundler/k2/disk.qcow2"
@@ -104,13 +104,13 @@ M
     [ -f "$CACHE_DIR/ruby-bundler/k2/disk.qcow2" ]
 }
 
-@test "bake-cache --rm reports no-op for unknown plugin" {
+@test "snapc-cache --rm reports no-op for unknown plugin" {
     run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --rm never-existed
     assert_success
     assert_output --partial "No cache entries"
 }
 
-@test "bake-cache --rebuild drops plugin + descendants" {
+@test "snapc-cache --rebuild drops plugin + descendants" {
     # docker-compose has parent_plugin = docker-engine in its meta.json,
     # so --rebuild docker-engine should also drop docker-compose entries.
     mkdir -p "$CACHE_DIR/docker-engine/de_k1" "$CACHE_DIR/docker-compose/dc_k1" "$CACHE_DIR/unrelated/u_k1"
@@ -155,13 +155,13 @@ ORAS
     export PATH
 }
 
-@test "bake-cache --push errors without ref" {
+@test "snapc-cache --push errors without ref" {
     run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push
     assert_failure 2
-    assert_output --partial "Usage: rl bake-cache --push"
+    assert_output --partial "Usage: rl snapc-cache --push"
 }
 
-@test "bake-cache --push errors when oras is not installed" {
+@test "snapc-cache --push errors when oras is not installed" {
     # PATH that has /bin (for bash itself) but not the stub dir → oras absent.
     run env PATH="/bin:/usr/bin" RL_LIB_DIR="$STUB_LIB" \
         RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push ghcr.io/x/y:latest
@@ -169,7 +169,7 @@ ORAS
     assert_output --partial "oras CLI required"
 }
 
-@test "bake-cache --push is a no-op when cache is empty" {
+@test "snapc-cache --push is a no-op when cache is empty" {
     _setup_oras_stub_for_push
     rm -rf "$CACHE_DIR"
     run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --push ghcr.io/x/y:latest
@@ -179,7 +179,7 @@ ORAS
     [ ! -f "$BATS_TEST_TMPDIR/oras.log" ]
 }
 
-@test "bake-cache --push tars every layer and invokes oras push" {
+@test "snapc-cache --push tars every layer and invokes oras push" {
     _setup_oras_stub_for_push
     mkdir -p "$CACHE_DIR/_base/k1" "$CACHE_DIR/docker-compose/k2"
     echo "diskbytes" > "$CACHE_DIR/_base/k1/disk.qcow2"
@@ -197,26 +197,26 @@ ORAS
     oras_argv=$(grep '^argv=' "$BATS_TEST_TMPDIR/oras.log")
     [[ "$oras_argv" == *"push"* ]]
     [[ "$oras_argv" == *"ghcr.io/x/y:latest"* ]]
-    # Each layer should appear as a tar.gz arg with the bakerish media
+    # Each layer should appear as a tar.gz arg with the snapcompose media
     # type annotation.
-    [[ "$oras_argv" == *"_base__k1.tar.gz:application/vnd.bakerish.layer.v1+gzip"* ]]
-    [[ "$oras_argv" == *"docker-compose__k2.tar.gz:application/vnd.bakerish.layer.v1+gzip"* ]]
+    [[ "$oras_argv" == *"_base__k1.tar.gz:application/vnd.snapcompose.layer.v1+gzip"* ]]
+    [[ "$oras_argv" == *"docker-compose__k2.tar.gz:application/vnd.snapcompose.layer.v1+gzip"* ]]
 }
 
-@test "bake-cache --pull errors without ref" {
+@test "snapc-cache --pull errors without ref" {
     run env RL_LIB_DIR="$STUB_LIB" RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --pull
     assert_failure 2
-    assert_output --partial "Usage: rl bake-cache --pull"
+    assert_output --partial "Usage: rl snapc-cache --pull"
 }
 
-@test "bake-cache --pull errors when oras is not installed" {
+@test "snapc-cache --pull errors when oras is not installed" {
     run env PATH="/bin:/usr/bin" RL_LIB_DIR="$STUB_LIB" \
         RL_CACHE_DIR="$CACHE_DIR" bash "$CMD" --pull ghcr.io/x/y:latest
     assert_failure 1
     assert_output --partial "oras CLI required"
 }
 
-@test "bake-cache --pull untars layers from the artifact into RL_CACHE_DIR" {
+@test "snapc-cache --pull untars layers from the artifact into RL_CACHE_DIR" {
     # Oras stub for pull: it writes two pre-canned tarballs into the
     # output dir (the -o argument), simulating what a real pull would
     # produce.

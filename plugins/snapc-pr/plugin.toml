@@ -4,10 +4,10 @@ deps = []
 # Only `git` is always required. `gh` is checked at runtime when a GitHub
 # PR is supplied; `glab` is checked at runtime when a GitLab MR is
 # supplied; neither is needed under --no-isolation. Listing them as
-# unconditional host_deps would force every bakeri.sh user to install
+# unconditional host_deps would force every snapcompose user to install
 # both CLIs even if they only ever target one platform.
 host_deps = ["git"]
 # Command-only plugin; framework dispatch_command falls back to all
 # discoverable plugins for command lookup.
 triggers = []
-commands = ["bake-pr"]
+commands = ["snapc-pr"]

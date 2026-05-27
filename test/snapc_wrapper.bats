@@ -38,7 +38,7 @@ STUB
 
     run env PATH="$bin_stub:/usr/bin:/bin" "$BAKE" run -- echo hi
     [ "$status" -eq 42 ]
-    [[ "$output" == *"RL ARGS: bake-run -- echo hi"* ]]
+    [[ "$output" == *"RL ARGS: snapc-run -- echo hi"* ]]
 }
 
 @test "bake forwards pr subcommand correctly" {
@@ -52,5 +52,5 @@ STUB
 
     run env PATH="$bin_stub:/usr/bin:/bin" "$BAKE" pr --cmd 'rake test' https://github.com/o/r/pull/1
     assert_success
-    [[ "$output" == *"RL ARGS: bake-pr --cmd rake test https://github.com/o/r/pull/1"* ]]
+    [[ "$output" == *"RL ARGS: snapc-pr --cmd rake test https://github.com/o/r/pull/1"* ]]
 }

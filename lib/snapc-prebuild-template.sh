@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Template plugin.sh — copied verbatim into every synthesised
-# _prebuild-<name>/ directory by lib/bake-prebuild.sh. Reads sibling
+# _prebuild-<name>/ directory by lib/snapc-prebuild.sh. Reads sibling
 # files cmd.sh and key_files.txt; the synthesiser writes those per
 # section. Keeping the logic uniform here means a fix in this file
-# applies to every prebuild step after the next `bake run` regenerates
+# applies to every prebuild step after the next `snapc run` regenerates
 # the plugins.
 
 set -euo pipefail

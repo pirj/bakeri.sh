@@ -1,10 +1,10 @@
-# `bakerish.toml`
+# `snapcompose.toml`
 
-Project-level config for bakeri.sh. Lives at the project root next to
+Project-level config for snapcompose. Lives at the project root next to
 `Gemfile` / `package.json` / `Cargo.toml`. Visible (not a dotfile) and
 checked into version control.
 
-`bake run` reads this file on every invocation. Sections inside it
+`snapc run` reads this file on every invocation. Sections inside it
 either:
 
 - override aq/rlock framework defaults (`[memory]`, `[disk]`), OR
@@ -12,14 +12,14 @@ either:
   chain (`[prebuild.<name>]`), OR
 - declare always-run post-restore hooks (`[on_start.<name>]`).
 
-If the file is absent, `bake run` behaves like `rl new` — discovers
+If the file is absent, `snapc run` behaves like `rl new` — discovers
 plugins by triggers and provisions accordingly. The file is a strict
 superset of the default behaviour; you only declare what you want to
 customise.
 
 ## File location and validation
 
-- `<project-root>/bakerish.toml`. No alternative location is searched.
+- `<project-root>/snapcompose.toml`. No alternative location is searched.
 - Parsed via rlock's shared `lib/toml.sh`. Same parser as `plugin.toml`
   manifests, so the same syntax rules apply.
 - Duplicate `[section]` headers (e.g. two `[prebuild.migrate]` blocks
@@ -88,7 +88,7 @@ Fields:
 | `key_files`  | yes      | Array of paths / globs at the project root. Their concatenated content (in declared order) drives the cache key. Empty array is rejected — every cached layer needs an invalidation signal. |
 | `strategy`   | no       | `cached` (default) or `incremental`. See "Strategy contract" below. |
 
-Order in `bakerish.toml` source = order in the chain. Each section's
+Order in `snapcompose.toml` source = order in the chain. Each section's
 synthesised plugin declares `deps = ["_prebuild-<previous-name>"]`, so
 walk_chain executes them sequentially.
 
@@ -98,7 +98,7 @@ it as framework-internal (hidden from `rl new`'s trigger/CLI surface).
 
 ### `[on_start.<name>]`
 
-Declares a command to run on **every** `bake run` after the snapshot
+Declares a command to run on **every** `snapc run` after the snapshot
 chain has restored. No cache. No `key_files`. Fires regardless of cache
 hit/miss.
 
@@ -176,21 +176,21 @@ match this shape — pick `cached`.
 
 ## Lifecycle interaction with the activated plugin chain
 
-`bake run` provisions in this order:
+`snapc run` provisions in this order:
 
 1. Detect activated plugins (by file trigger if no explicit list).
-2. Synthesise `_prebuild-*` from bakerish.toml's `[prebuild.<name>]`
+2. Synthesise `_prebuild-*` from snapcompose.toml's `[prebuild.<name>]`
    sections — one plugin per section, under
-   `<project>/.bakerish/plugins/_prebuild-<name>/`.
+   `<project>/.snapcompose/plugins/_prebuild-<name>/`.
 3. `rl new <triggered-plugins> <_prebuild-*>` — chain order is:
    triggered plugins (deps resolved), then `_prebuild-*` in source
-   order from bakerish.toml.
+   order from snapcompose.toml.
 4. After the chain, run `[on_start.<name>]` cmds in source order via
    the framework's `start` hook.
 
-The synthesised plugins are generated **on every `bake run`** — parse
+The synthesised plugins are generated **on every `snapc run`** — parse
 + write is millisecond-cheap. No mtime tracking, no cache logic for
-the generator itself. If you edit bakerish.toml, the next `bake run`
+the generator itself. If you edit snapcompose.toml, the next `snapc run`
 sees fresh plugin shapes; if `key_files` content moved, snapshot_key
 changes and walk_chain re-builds the affected layer.
 
@@ -277,17 +277,17 @@ instead (see `docs/writing-a-plugin.md` for the pattern):
 
 ## File layout written into the project
 
-After `bake run`, you'll see:
+After `snapc run`, you'll see:
 
 ```
 <project>/
-├── bakerish.toml             ← yours, checked in
-├── .bakerish/
+├── snapcompose.toml             ← yours, checked in
+├── .snapcompose/
 │   └── plugins/
 │       ├── _prebuild-schema-load/
 │       │   ├── plugin.toml
-│       │   ├── plugin.sh     ← copy of bakeri.sh/lib/bake-prebuild-template.sh
-│       │   ├── cmd.sh        ← verbatim cmd from bakerish.toml
+│       │   ├── plugin.sh     ← copy of snapcompose/lib/snapc-prebuild-template.sh
+│       │   ├── cmd.sh        ← verbatim cmd from snapcompose.toml
 │       │   └── key_files.txt
 │       ├── _prebuild-migrate/
 │       │   └── …
@@ -295,14 +295,14 @@ After `bake run`, you'll see:
 │           └── …
 ```
 
-`.bakerish/` is generated. Don't edit anything inside — every `bake
-run` regenerates from `bakerish.toml`. If you want to gitignore it,
-add `.bakerish/` to your project's `.gitignore`; on CI you don't need
+`.snapcompose/` is generated. Don't edit anything inside — every `bake
+run` regenerates from `snapcompose.toml`. If you want to gitignore it,
+add `.snapcompose/` to your project's `.gitignore`; on CI you don't need
 to (the runner's filesystem is ephemeral).
 
 ## See also
 
-- [design spec](superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md)
+- [design spec](superpowers/specs/2026-05-20-snapcompose-toml-and-prebuild.md)
   — full reasoning behind the format choices, especially the strategy
   contract and the `[prebuild.<name>]`-as-one-position constraint.
 - `writing-a-plugin.md` — escape hatch when prebuild doesn't fit.

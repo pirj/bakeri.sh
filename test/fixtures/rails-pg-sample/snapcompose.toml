@@ -14,7 +14,7 @@
 # was designed for — most pages are identical to the parent
 # layer's memory, only the deltas are stored.
 #
-# Note on single-line cmd: bakeri.sh's TOML reader (rlock's
+# Note on single-line cmd: snapcompose's TOML reader (rlock's
 # lib/toml.sh) handles only single-line `key = "value"` form.
 # TOML's triple-quoted multi-line strings aren't supported. So
 # multi-step shells are chained with `&&` (fail fast) or `; `

@@ -1,4 +1,4 @@
-# bakeri.sh
+# snapcompose
 
 Distribution of pre-baked, cache-warmed environment plugins for [rlock](https://github.com/pirj/rlock). Bake your project's environment once into a snapshot; serve it warm in under a second on every subsequent `rl new`.
 
@@ -16,18 +16,18 @@ Planned (see `docs/superpowers/plans/`):
 - `mise`, `nvm` — language runtime managers
 - `ruby-bundler`, `npm`, `uv`, `pnpm`, `poetry` — dependency installers
 - `rails-db-migrations`, `rails-db-seeds`, `rails-load-db-schema` — Rails lifecycle
-- `bake run` — one-shot CI job runner
-- `bake pr` — PR-from-untrusted-fork sandbox runner
+- `snapc run` — one-shot CI job runner
+- `snapc pr` — PR-from-untrusted-fork sandbox runner
 
 ## Install
 
-bakeri.sh is a plugin pack: it provides plugins for the rlock framework. Clone both side by side, then add both `bin/` dirs to `PATH`:
+snapcompose is a plugin pack: it provides plugins for the rlock framework. Clone both side by side, then add both `bin/` dirs to `PATH`:
 
 ```sh
 git clone git@github.com:pirj/rlock.git
-git clone git@github.com:pirj/bakeri.sh.git
-export PATH="$PWD/rlock/bin:$PWD/bakeri.sh/bin:$PATH"
-export RLOCK_PLUGIN_PATH="$PWD/bakeri.sh/plugins"
+git clone git@github.com:pirj/snapcompose.git
+export PATH="$PWD/rlock/bin:$PWD/snapcompose/bin:$PATH"
+export RLOCK_PLUGIN_PATH="$PWD/snapcompose/plugins"
 
 cd your-project   # has Dockerfile / docker-compose.yml
 rl new            # provisions the VM, walking the cache chain
@@ -38,16 +38,16 @@ bake run -- rake test
 
 | Friendly form           | Equivalent                              |
 |-------------------------|-----------------------------------------|
-| `bake run -- <cmd>`     | `rl bake-run -- <cmd>`                  |
-| `bake pr --cmd '<cmd>' <pr-url>` | `rl bake-pr --cmd '<cmd>' <pr-url>` |
-| `bake cache`            | `rl bake-cache`                         |
-| `bake cache --rm <plugin>` | `rl bake-cache --rm <plugin>`         |
+| `snapc run -- <cmd>`     | `rl snapc-run -- <cmd>`                  |
+| `snapc pr --cmd '<cmd>' <pr-url>` | `rl snapc-pr --cmd '<cmd>' <pr-url>` |
+| `snapc cache`            | `rl snapc-cache`                         |
+| `snapc cache --rm <plugin>` | `rl snapc-cache --rm <plugin>`         |
 
-For full Docker functionality, `aq` (the underlying VM engine) needs enough RAM. The current `aq -m 1G` default is too tight for most compose stacks. Roadmap item: `aq --memory=NG` flag, after which bakeri.sh plugins can declare `kind = "live"` for sub-second restore. Until then, expect cold restarts on warm-layer cache hits.
+For full Docker functionality, `aq` (the underlying VM engine) needs enough RAM. The current `aq -m 1G` default is too tight for most compose stacks. Roadmap item: `aq --memory=NG` flag, after which snapcompose plugins can declare `kind = "live"` for sub-second restore. Until then, expect cold restarts on warm-layer cache hits.
 
 ## Design
 
-bakeri.sh is one of several plugin packs that consume the rlock framework. Architecture is documented in:
+snapcompose is one of several plugin packs that consume the rlock framework. Architecture is documented in:
 
 - [`rlock/docs/superpowers/specs/2026-05-11-layered-snapshots-design.md`](https://github.com/pirj/rlock/blob/main/docs/superpowers/specs/2026-05-11-layered-snapshots-design.md) — layered qcow2 snapshot orchestration, plugin protocol, cached/incremental/ephemeral strategies.
 - [`rlock/docs/superpowers/specs/2026-05-18-snapshot-kind-design.md`](https://github.com/pirj/rlock/blob/main/docs/superpowers/specs/2026-05-18-snapshot-kind-design.md) — cold-vs-live snapshot tradeoff.
@@ -56,7 +56,7 @@ bakeri.sh is one of several plugin packs that consume the rlock framework. Archi
 ## Tests
 
 ```sh
-# From the bakeri.sh checkout, with rlock as a sibling directory:
+# From the snapcompose checkout, with rlock as a sibling directory:
 bats test/
 ```
 

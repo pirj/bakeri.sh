@@ -11,6 +11,6 @@
 .claude/
 .aider*
 
-# Project-local state produced by `rl new` / `bake run`
+# Project-local state produced by `rl new` / `snapc run`
 .rl/
-.bakerish/
+.snapcompose/

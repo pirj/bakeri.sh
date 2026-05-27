@@ -4,33 +4,33 @@ setup() {
     load 'test_helper/common'
     _common_setup
     source "$LIB_DIR/toml.sh"
-    source "$PROJECT_ROOT/lib/bake-prebuild.sh"
+    source "$PROJECT_ROOT/lib/snapc-prebuild.sh"
 
     PROJECT="$BATS_TEST_TMPDIR/proj"
     SYNTH="$BATS_TEST_TMPDIR/synth"
-    TEMPLATE="$PROJECT_ROOT/lib/bake-prebuild-template.sh"
+    TEMPLATE="$PROJECT_ROOT/lib/snapc-prebuild-template.sh"
     mkdir -p "$PROJECT"
 }
 
-@test "bake_prebuild_synthesize is a no-op when bakerish.toml is missing" {
-    run bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
+@test "snapc_prebuild_synthesize is a no-op when snapcompose.toml is missing" {
+    run snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
     assert_success
     assert_output ""
     [ ! -d "$SYNTH" ]
 }
 
-@test "bake_prebuild_synthesize is a no-op when bakerish.toml has no [prebuild.*]" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+@test "snapc_prebuild_synthesize is a no-op when snapcompose.toml has no [prebuild.*]" {
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [memory]
 size = "4G"
 EOF
-    run bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
+    run snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
     assert_success
     assert_output ""
 }
 
-@test "bake_prebuild_synthesize generates one plugin per [prebuild.<name>]" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+@test "snapc_prebuild_synthesize generates one plugin per [prebuild.<name>]" {
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.schema-load]
 cmd = "rails db:schema:load"
 key_files = ["db/schema.rb"]
@@ -44,7 +44,7 @@ strategy = "cached"
 cmd = "rails db:seed"
 key_files = ["db/seeds.rb"]
 EOF
-    run bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
+    run snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
     assert_success
     assert_line --index 0 "_prebuild-schema-load"
     assert_line --index 1 "_prebuild-migrate"
@@ -56,7 +56,7 @@ EOF
 }
 
 @test "synthesised plugin.toml chains deps to preserve source order" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.first]
 cmd = "echo a"
 key_files = ["a.txt"]
@@ -65,14 +65,14 @@ key_files = ["a.txt"]
 cmd = "echo b"
 key_files = ["b.txt"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     grep -q '^deps = \[\]$' "$SYNTH/_prebuild-first/plugin.toml"
     grep -q '^deps = \["_prebuild-first"\]$' "$SYNTH/_prebuild-second/plugin.toml"
 }
 
 @test "synthesised plugin.toml honours declared strategy (default cached)" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.a]
 cmd = "x"
 key_files = ["x"]
@@ -82,19 +82,19 @@ cmd = "y"
 key_files = ["y"]
 strategy = "incremental"
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     grep -q '^strategy = "cached"$' "$SYNTH/_prebuild-a/plugin.toml"
     grep -q '^strategy = "incremental"$' "$SYNTH/_prebuild-b/plugin.toml"
 }
 
 @test "synthesised cmd.sh contains the verbatim cmd from the section" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "docker compose exec app rails db:migrate"
 key_files = ["db/schema.rb"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     grep -q 'docker compose exec app rails db:migrate' "$SYNTH/_prebuild-demo/cmd.sh"
     # set -eu is prepended so user typos fail the layer
@@ -102,12 +102,12 @@ EOF
 }
 
 @test "synthesised key_files.txt has one declared glob per line" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["db/schema.rb", "db/migrate/*.rb", "config/database.yml"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     run cat "$SYNTH/_prebuild-demo/key_files.txt"
     assert_success
@@ -117,38 +117,38 @@ EOF
 }
 
 @test "synthesised plugin.sh is a copy of the template" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["a"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     diff "$TEMPLATE" "$SYNTH/_prebuild-demo/plugin.sh"
 }
 
-@test "bake_prebuild_synthesize fails on missing required cmd" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+@test "snapc_prebuild_synthesize fails on missing required cmd" {
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 key_files = ["a"]
 EOF
-    run bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
+    run snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
     assert_failure
     assert_output --partial "missing required 'cmd'"
 }
 
-@test "bake_prebuild_synthesize fails on missing required key_files" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+@test "snapc_prebuild_synthesize fails on missing required key_files" {
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 EOF
-    run bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
+    run snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
     assert_failure
     assert_output --partial "missing required 'key_files'"
 }
 
-@test "bake_prebuild_synthesize rejects a bakerish.toml with duplicate sections" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+@test "snapc_prebuild_synthesize rejects a snapcompose.toml with duplicate sections" {
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.migrate]
 cmd = "x"
 key_files = ["x"]
@@ -157,40 +157,40 @@ key_files = ["x"]
 cmd = "y"
 key_files = ["y"]
 EOF
-    run bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
+    run snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE"
     assert_failure
     assert_output --partial "duplicate table headers"
 }
 
 @test "regenerating overwrites stale plugin contents" {
     # First synthesis with cmd=A.
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo A"
 key_files = ["a"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
     grep -q 'echo A' "$SYNTH/_prebuild-demo/cmd.sh"
 
     # Update the toml; second synthesis must replace cmd.sh content,
     # not leave the old "echo A" line behind.
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo B"
 key_files = ["a"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
     grep -q 'echo B' "$SYNTH/_prebuild-demo/cmd.sh"
     ! grep -q 'echo A' "$SYNTH/_prebuild-demo/cmd.sh"
 }
 
 @test "synthesised plugin's snapshot_key is stable when inputs unchanged" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["a.txt", "b.txt"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     cd "$PROJECT"
     echo "A" > a.txt
@@ -203,12 +203,12 @@ EOF
 }
 
 @test "synthesised plugin's snapshot_key changes when a key_file's content changes" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["schema.rb"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     cd "$PROJECT"
     echo "version 1" > schema.rb
@@ -224,21 +224,21 @@ EOF
     cd "$PROJECT"
     echo "X" > x.txt
 
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo first"
 key_files = ["x.txt"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
     local k1
     k1=$(RL_LIB_DIR="$LIB_DIR" bash "$SYNTH/_prebuild-demo/plugin.sh" snapshot_key)
 
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo second"
 key_files = ["x.txt"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
     local k2
     k2=$(RL_LIB_DIR="$LIB_DIR" bash "$SYNTH/_prebuild-demo/plugin.sh" snapshot_key)
 
@@ -246,12 +246,12 @@ EOF
 }
 
 @test "synthesised plugin's snapshot_should_skip prints 'skip' when no key_files match" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["missing-glob-*.rb"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     cd "$PROJECT"
     run env RL_LIB_DIR="$LIB_DIR" bash "$SYNTH/_prebuild-demo/plugin.sh" snapshot_should_skip
@@ -260,12 +260,12 @@ EOF
 }
 
 @test "synthesised plugin's snapshot_should_skip stays silent when a key_file matches" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["present.txt"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     cd "$PROJECT"
     echo "hi" > present.txt
@@ -275,12 +275,12 @@ EOF
 }
 
 @test "synthesised plugin's snapshot_key uses glob-expansion at PROJECT cwd" {
-    cat > "$PROJECT/bakerish.toml" <<'EOF'
+    cat > "$PROJECT/snapcompose.toml" <<'EOF'
 [prebuild.demo]
 cmd = "echo demo"
 key_files = ["db/migrate/*.rb"]
 EOF
-    bake_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
+    snapc_prebuild_synthesize "$PROJECT" "$SYNTH" "$TEMPLATE" >/dev/null
 
     cd "$PROJECT"
     mkdir -p db/migrate

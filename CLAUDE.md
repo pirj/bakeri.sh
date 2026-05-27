@@ -1,15 +1,15 @@
-# bakeri.sh — orientation for agents
+# snapcompose — orientation for agents
 
-`bakeri.sh` is the **CI / pre-baked-environment plugin pack** for
+`snapcompose` is the **CI / pre-baked-environment plugin pack** for
 [`rlock`](https://github.com/pirj/rlock). Bakes a project's
 environment once into a snapshot chain; serves it sub-second on
-every `rl new` / `bake run`.
+every `rl new` / `snapc run`.
 
-> **Rename pending: `bakeri.sh` → `snapcompose`.** Announced
-> 2026-05-25, not executed. Directory, repo, `bake` command,
-> `bakerish.toml` config file all still use the bakeri.sh-era
-> spellings. Coordinate the rename via the cross-cutting items
-> in [`../meta/TODO.md`](../meta/TODO.md) when scheduled.
+> Renamed from `bakeri.sh` to `snapcompose` on 2026-05-27.
+> The `bake` CLI command became `snapc`, the config file
+> became `snapcompose.toml`, and the OCI cache media type
+> became `application/vnd.snapcompose.layer.v1+gzip`. Clean
+> break — old names are not aliased.
 
 See [`README.md`](README.md) for usage, [`TODO.md`](TODO.md) for
 open work, and the umbrella's [`CLAUDE.md`](../CLAUDE.md) for how
@@ -39,9 +39,9 @@ plugins/
 ├── docker-registry-cache    host-side registry mirror, cache image layers
 ├── mise / uv / pnpm / poetry / cargo  dep-installer plugins
 ├── ruby-bundler / npm       same shape, per-ecosystem
-├── bake-run                 one-shot command runner ("bake run -- pytest")
-├── bake-cache               cache mgmt (--gc, --push, --pull OCI)
-└── bake-pr                  PR-from-untrusted-fork sandbox (in progress)
+├── snapc-run                 one-shot command runner ("bake run -- pytest")
+├── snapc-cache               cache mgmt (--gc, --push, --pull OCI)
+└── snapc-pr                  PR-from-untrusted-fork sandbox (in progress)
 ```
 
 Each plugin is `rlock`'s plugin protocol shape — `plugin.toml`,
@@ -67,9 +67,9 @@ In-place updates of leaf incremental layers are a planned
 optimization — see `../rlock/TODO.md` "In-place update of leaf
 incremental layers."
 
-## `bakerish.toml` — per-project config
+## `snapcompose.toml` — per-project config
 
-Project root has a `bakerish.toml` declaring which plugins
+Project root has a `snapcompose.toml` declaring which plugins
 activate, in what order, with what config:
 
 ```toml
@@ -84,7 +84,7 @@ gemfile = "Gemfile"
 ```
 
 `rl new` synthesizes the plugin activation list from this. See
-`docs/bakerish-toml.md` for the full schema.
+`docs/snapcompose-toml.md` for the full schema.
 
 ## Commands
 
@@ -97,7 +97,7 @@ bake pr <pr-url>            sandbox an untrusted fork PR
 bake snapshot inspect       show cached snapshot details
 ```
 
-`bake run` is the CI workhorse; `bake pr` is the in-progress
+`snapc run` is the CI workhorse; `snapc pr` is the in-progress
 adventure (untrusted-fork model under discussion in TODO).
 
 ## Conventions
@@ -120,12 +120,12 @@ adventure (untrusted-fork model under discussion in TODO).
 ## What NOT to do
 
 - Don't introduce a "bare Alpine" snapshot layer below
-  `docker-engine`. In bakeri.sh every VM activates
+  `docker-engine`. In snapcompose every VM activates
   docker-engine, so a separate Alpine layer would always have
   exactly one descendant — pure overhead.
 - Don't add plugins speculatively. Each new dep-installer is
   ~50 lines of boilerplate; we ship when a real user needs it.
-- Don't break `bakerish.toml` schema. `setup-bakerish` and
+- Don't break `snapcompose.toml` schema. `setup-snapcompose` and
   user projects depend on it; bump `protocol_version` and
   document migration if you must.
 - Don't merge a CHANGELOG entry without a benchmark run if the
@@ -139,22 +139,22 @@ Required:
 - [`rlock`](https://github.com/pirj/rlock) — the plugin framework.
 - [`aq`](https://github.com/pirj/aq) — VM lifecycle (transitively).
 
-Wraps `bakeri.sh` for GH Actions:
+Wraps `snapcompose` for GH Actions:
 
-- [`setup-bakerish`](https://github.com/pirj/setup-bakerish) —
+- [`setup-snapcompose`](https://github.com/pirj/setup-snapcompose) —
   composite action; rename to `setup-snapcompose` follows the
-  bakeri.sh rename.
+  snapcompose rename.
 
 Coexists in workspace:
 
 - [`ai.rlock`](https://github.com/pirj/ai.rlock) — different
-  plugin pack (AI agents). Can run alongside `bakeri.sh` in the
+  plugin pack (AI agents). Can run alongside `snapcompose` in the
   same VM; see ai.rlock README for combined use.
 
 ## Where decisions go
 
 - **Mechanical work** for this pack → [`TODO.md`](TODO.md).
-- **Cross-cutting decisions** affecting bakeri.sh + sibling
+- **Cross-cutting decisions** affecting snapcompose + sibling
   repos (snapshot protocol changes, plugin-pack versioning,
   cache-transport format) → ADRs in `../meta/decisions/`. See
   `../meta/CLAUDE.md`.
@@ -163,7 +163,7 @@ Coexists in workspace:
 
 ## Workspace context
 
-This repo lives at `~/source/ai.rlock/bakeri.sh/` inside the
+This repo lives at `~/source/ai.rlock/snapcompose/` inside the
 umbrella workspace. The umbrella's [`CLAUDE.md`](../CLAUDE.md) is
 the single best map of how all sibling repos connect, including
 the pending rename.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bake-prebuild synthesiser — parses a project's bakerish.toml and
+# snapc-prebuild synthesiser — parses a project's snapcompose.toml and
 # materialises one rlock plugin per `[prebuild.<name>]` section under
 # the given synth directory. The synthesised plugins are normal rlock
 # plugins as far as discovery / dep resolution / walk_chain are
@@ -8,11 +8,11 @@
 # Designed for sourcing from `bin/bake`. Depends on rlock's lib/toml.sh
 # for parsing (sourced separately by the caller via $RL_LIB_DIR).
 
-# Synthesise prebuild plugins from a project's bakerish.toml.
+# Synthesise prebuild plugins from a project's snapcompose.toml.
 #
-# Usage: bake_prebuild_synthesize <project_root> <synth_dir> <template_path>
+# Usage: snapc_prebuild_synthesize <project_root> <synth_dir> <template_path>
 #
-# Reads <project_root>/bakerish.toml. For each `[prebuild.<name>]`
+# Reads <project_root>/snapcompose.toml. For each `[prebuild.<name>]`
 # section (in source order):
 #   - Creates <synth_dir>/_prebuild-<name>/
 #   - Writes plugin.toml with deps chaining each section to the previous
@@ -26,18 +26,18 @@
 # Prints the synthesised plugin names to stdout, one per line, in
 # source order — the caller appends these to the `rl new` argument list.
 #
-# Returns 0 if no bakerish.toml or no [prebuild.*] sections exist; the
+# Returns 0 if no snapcompose.toml or no [prebuild.*] sections exist; the
 # function is a no-op in that case (prints nothing). Returns non-zero
 # on validation errors (toml_validate fails, missing required fields).
-bake_prebuild_synthesize() {
+snapc_prebuild_synthesize() {
     local project_root="$1"
     local synth_dir="$2"
     local template_path="$3"
 
-    local bakerish_toml="$project_root/bakerish.toml"
-    [[ -f "$bakerish_toml" ]] || return 0
+    local snapcompose_toml="$project_root/snapcompose.toml"
+    [[ -f "$snapcompose_toml" ]] || return 0
 
-    toml_validate "$bakerish_toml" || return 1
+    toml_validate "$snapcompose_toml" || return 1
 
     # Enumerate [prebuild.*] sections in source order. The grep matches
     # only single-bracket headers (`[prebuild.foo]`); `[[arrays-of-
@@ -46,7 +46,7 @@ bake_prebuild_synthesize() {
     local section_line
     while IFS= read -r section_line; do
         sections+=("$section_line")
-    done < <(grep -E '^\[prebuild\.[^][]+\]' "$bakerish_toml" \
+    done < <(grep -E '^\[prebuild\.[^][]+\]' "$snapcompose_toml" \
         | sed -E 's/^\[prebuild\.(.+)\]/\1/')
 
     [[ ${#sections[@]} -eq 0 ]] && return 0
@@ -64,37 +64,37 @@ bake_prebuild_synthesize() {
         rm -rf "$plugin_dir"
         mkdir -p "$plugin_dir"
 
-        cmd=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "cmd")
-        strategy=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "strategy")
+        cmd=$(toml_get_in_section "$snapcompose_toml" "prebuild.$section" "cmd")
+        strategy=$(toml_get_in_section "$snapcompose_toml" "prebuild.$section" "strategy")
         strategy="${strategy:-cached}"
-        kind=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "kind")
+        kind=$(toml_get_in_section "$snapcompose_toml" "prebuild.$section" "kind")
         kind="${kind:-cold}"
-        memory=$(toml_get_in_section "$bakerish_toml" "prebuild.$section" "memory")
+        memory=$(toml_get_in_section "$snapcompose_toml" "prebuild.$section" "memory")
         key_files=()
         local kf
         while IFS= read -r kf; do
             [[ -n "$kf" ]] && key_files+=("$kf")
-        done < <(toml_get_array_in_section "$bakerish_toml" "prebuild.$section" "key_files")
+        done < <(toml_get_array_in_section "$snapcompose_toml" "prebuild.$section" "key_files")
 
         if [[ -z "$cmd" ]]; then
-            echo "Error: bakerish.toml [prebuild.$section] missing required 'cmd'." >&2
+            echo "Error: snapcompose.toml [prebuild.$section] missing required 'cmd'." >&2
             return 1
         fi
         if [[ ${#key_files[@]} -eq 0 ]]; then
-            echo "Error: bakerish.toml [prebuild.$section] missing required 'key_files' (or empty)." >&2
+            echo "Error: snapcompose.toml [prebuild.$section] missing required 'key_files' (or empty)." >&2
             return 1
         fi
         case "$kind" in
             cold|live) ;;
             *)
-                echo "Error: bakerish.toml [prebuild.$section] has invalid 'kind' = '$kind' (expected cold|live)." >&2
+                echo "Error: snapcompose.toml [prebuild.$section] has invalid 'kind' = '$kind' (expected cold|live)." >&2
                 return 1
                 ;;
         esac
 
         # plugin.toml
         {
-            printf 'description = "bakerish.toml prebuild: %s"\n' "$section"
+            printf 'description = "snapcompose.toml prebuild: %s"\n' "$section"
             printf 'protocol_version = "1"\n'
             if [[ -n "$prev" ]]; then
                 printf 'deps = ["%s"]\n' "$prev"

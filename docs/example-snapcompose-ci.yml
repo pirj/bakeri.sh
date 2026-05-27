@@ -1,8 +1,8 @@
-# Reference GitHub Actions workflow for projects using bakeri.sh.
+# Reference GitHub Actions workflow for projects using snapcompose.
 #
 # Copy-paste this into <your-project>/.github/workflows/ci.yml and
 # adapt the matrix / commands. Lives in docs/ (not .github/workflows/)
-# because it's reference material — bakeri.sh's own repo doesn't run
+# because it's reference material — snapcompose's own repo doesn't run
 # it as CI.
 #
 # Two forms below: the recommended packaged-action form first, then
@@ -12,11 +12,11 @@
 # ─────────────────────────────────────────────────────────────────────
 # Form 1 — packaged action (recommended)
 # ─────────────────────────────────────────────────────────────────────
-# pirj/setup-bakerish bundles the host-prereqs install (qemu, ovmf,
-# tio source-build, etc.), the aq/rlock/bakeri.sh install, and the
+# pirj/setup-snapcompose bundles the host-prereqs install (qemu, ovmf,
+# tio source-build, etc.), the aq/rlock/snapcompose install, and the
 # layer-cache restore+save into one composite step. It is the path
 # that's validated end-to-end on ubuntu-latest; the inline form
-# below is mostly useful for understanding what setup-bakerish does
+# below is mostly useful for understanding what setup-snapcompose does
 # under the hood.
 
 name: ci
@@ -40,9 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pirj/setup-bakerish@v2
+      - uses: pirj/setup-snapcompose@v2
 
-      # `bake run` is idempotent: provisions the VM on first call
+      # `snapc run` is idempotent: provisions the VM on first call
       # (using cache layers wherever snapshot_key matches), reuses on
       # subsequent calls. Exit code of the inner command propagates.
       #
@@ -51,8 +51,8 @@ jobs:
       # on the same cache key is warm (~2.7 s for the chain restore
       # + the test command's own runtime).
       - name: Run tests
-        run: bake run -- bundle exec rspec
-        # If you split work into multiple `bake run` calls, they
+        run: snapc run -- bundle exec rspec
+        # If you split work into multiple `snapc run` calls, they
         # reuse the same VM by default. Add --vm-suffix=<tag> to fan
         # out across independent VMs within the same job, e.g.
         #   bake run --vm-suffix=lint -- rubocop &
@@ -63,7 +63,7 @@ jobs:
 # ─────────────────────────────────────────────────────────────────────
 # Form 2 — expanded inline (for understanding / customization)
 # ─────────────────────────────────────────────────────────────────────
-# Equivalent to the above but with setup-bakerish unrolled. Use this
+# Equivalent to the above but with setup-snapcompose unrolled. Use this
 # form when you need to customize one of the steps (e.g. add an
 # extra cache path, pin a different aq version, build tio from a
 # different source). For everything else, prefer Form 1.
@@ -86,23 +86,23 @@ jobs:
 #         git clone --depth=1 --branch v3.9 https://github.com/tio/tio /tmp/tio
 #         (cd /tmp/tio && meson setup build && meson compile -C build && sudo meson install -C build)
 #
-#     - name: Install aq / rlock / bakeri.sh
+#     - name: Install aq / rlock / snapcompose
 #       run: |
 #         git clone --depth=1 https://github.com/pirj/aq        "$HOME/aq"
 #         git clone --depth=1 https://github.com/pirj/rlock     "$HOME/rlock"
-#         git clone --depth=1 https://github.com/pirj/bakeri.sh "$HOME/bakeri.sh"
+#         git clone --depth=1 https://github.com/pirj/snapcompose "$HOME/snapcompose"
 #         {
 #           echo "$HOME/aq"
 #           echo "$HOME/rlock/bin"
-#           echo "$HOME/bakeri.sh/bin"
+#           echo "$HOME/snapcompose/bin"
 #         } >> "$GITHUB_PATH"
-#         echo "RLOCK_PLUGIN_PATH=$HOME/bakeri.sh/plugins" >> "$GITHUB_ENV"
+#         echo "RLOCK_PLUGIN_PATH=$HOME/snapcompose/plugins" >> "$GITHUB_ENV"
 #
 #     # Layer cache. Key derives from every file influencing a
-#     # snapshot_key: bakerish.toml + common lockfiles + key_files
+#     # snapshot_key: snapcompose.toml + common lockfiles + key_files
 #     # from [prebuild.*] sections. Partial restore via restore-keys
 #     # is safe — the framework re-checks each layer independently.
-#     - name: Restore bakeri.sh layer cache
+#     - name: Restore snapcompose layer cache
 #       id: cache-restore
 #       uses: actions/cache/restore@v4
 #       with:
@@ -110,8 +110,8 @@ jobs:
 #           ~/.local/share/aq/cache
 #           ~/.local/share/aq/x86_64
 #         key: |
-#           bakeri-${{ runner.os }}-${{ hashFiles(
-#             'bakerish.toml',
+#           snapcompose-${{ runner.os }}-${{ hashFiles(
+#             'snapcompose.toml',
 #             '**/Gemfile.lock',
 #             '**/package-lock.json',
 #             '**/pnpm-lock.yaml',
@@ -124,13 +124,13 @@ jobs:
 #             'docker-compose.*'
 #           ) }}
 #         restore-keys: |
-#           bakeri-${{ runner.os }}-
+#           snapcompose-${{ runner.os }}-
 #
-#     - run: bake run -- bundle exec rspec
+#     - run: snapc run -- bundle exec rspec
 #
 #     # Save the cache. Always-save (`if: always()`) lets us cache
 #     # partial progress even when tests fail.
-#     - name: Save bakeri.sh layer cache
+#     - name: Save snapcompose layer cache
 #       if: always() && steps.cache-restore.outputs.cache-hit != 'true'
 #       uses: actions/cache/save@v4
 #       with:

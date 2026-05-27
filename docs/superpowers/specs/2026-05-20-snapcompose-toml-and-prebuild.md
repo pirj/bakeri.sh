@@ -1,13 +1,13 @@
-# `bakerish.toml` + prebuild layers — design spec — 2026-05-20
+# `snapcompose.toml` + prebuild layers — design spec — 2026-05-20
 
-Project-level config for bakeri.sh: declarative chain extensions that
+Project-level config for snapcompose: declarative chain extensions that
 synthesise into rlock-visible snapshot layers, plus always-run hooks.
 Captures all decisions from the 2026-05-20 design conversation so the
 implementation pass can run without re-deriving them.
 
 ## Context and priority
 
-bakeri.sh is a distribution on top of rlock targeted at **CI/PR
+snapcompose is a distribution on top of rlock targeted at **CI/PR
 workloads** — primarily GitHub Actions caching where VM snapshots are
 restored across CI runs. Local PR isolation is a side use case and is
 *not* the priority; a future separate tool (working title `p.rlock`)
@@ -16,10 +16,10 @@ will cover it. This spec optimises for the CI scenario throughout.
 Two concrete consequences for CI-first thinking:
 
 - **No state between invocations.** A GH runner is destroyed after
-  each job; `bake run` always starts with a clean filesystem plus
+  each job; `snapc run` always starts with a clean filesystem plus
   whatever `actions/cache` restored. Anything we'd otherwise treat as
   "invalidate on config change" is moot — the next CI run computes
-  the new cache key from `bakerish.toml` content and either hits or
+  the new cache key from `snapcompose.toml` content and either hits or
   misses naturally.
 - **Speed of warm restore over a populated cache is the headline.**
   Every design decision below trades complexity to preserve sub-3 s
@@ -27,8 +27,8 @@ Two concrete consequences for CI-first thinking:
 
 ## File format
 
-`bakerish.toml` lives at the project root. The filename intentionally
-drops the dot from "bakeri.sh" so it stays a normal visible config
+`snapcompose.toml` lives at the project root. The filename intentionally
+drops the dot from "snapcompose" so it stays a normal visible config
 file (sibling of `package.json` / `Gemfile`), not a dotfile.
 
 Three section types:
@@ -50,7 +50,7 @@ cmd = "<shell-command>"
 
 Single `size` key, format `"<N>G"`. Override what `aq new --memory`
 gets. Defaults today come from `max_snapshot_memory` across active
-plugins. The `bakerish.toml` value wins if both are present.
+plugins. The `snapcompose.toml` value wins if both are present.
 
 ### `[prebuild.<name>]`
 
@@ -74,7 +74,7 @@ Fields:
 ### `[on_start.<name>]`
 
 Each section becomes a post-restore hook (rlock's `start` hook). Fires
-**every** `bake run` after the snapshot chain finishes restoring,
+**every** `snapc run` after the snapshot chain finishes restoring,
 regardless of cache hit/miss. No cache key, no `key_files`. Only `cmd`.
 
 Use for: refreshing per-session secrets, generating dev-only fixtures,
@@ -136,14 +136,14 @@ internally reconcile vendor state to the lockfile.
 - `poetry install`: same. ✓
 - `cargo fetch`: same. ✓
 
-This is exactly the set of dep-installer plugins bakeri.sh ships;
+This is exactly the set of dep-installer plugins snapcompose ships;
 they all already declare `strategy = "incremental"`.
 
 ## Mixing layers and ordering — current limitation
 
 `[prebuild.*]` sections become snapshot layers at **one position in
 the chain**: at the end, after all activated plugins (the
-`bake-prebuild` synthesis plugin declares deps on every plugin it can
+`snapc-prebuild` synthesis plugin declares deps on every plugin it can
 see at synthesis time, so the resolver places it last).
 
 This means a `[prebuild.*]` step can't be interleaved BETWEEN existing
@@ -151,12 +151,12 @@ plugins. Specifically: you can't have a step that runs between
 `docker-compose` and `mise`, or before `docker-engine`.
 
 The order *within* `[prebuild.*]` sections is preserved (source order
-in `bakerish.toml`).
+in `snapcompose.toml`).
 
 **Roadmap follow-up: `plugin = "<name>"` reference.** A future
-`bakerish.toml` form would allow each section to be either an inline
+`snapcompose.toml` form would allow each section to be either an inline
 `cmd + key_files` step OR a reference to an existing plugin
-(`plugin = "ruby-bundler"`). Then `bakerish.toml` becomes the
+(`plugin = "ruby-bundler"`). Then `snapcompose.toml` becomes the
 authoritative chain definition, with interleaving by construction.
 This pivots rlock's mental model (trigger-detection + dep DAG → explicit
 linear chain spec). Deferred until prebuild-MVP is shipped and
@@ -164,7 +164,7 @@ demonstrates the need.
 
 ## Plugin synthesis (option B)
 
-bakerish.toml's `[prebuild.*]` sections become snapshot layers via
+snapcompose.toml's `[prebuild.*]` sections become snapshot layers via
 **B**: pre-walk file-system generation, plus environment-driven
 discovery in rlock.
 
@@ -176,16 +176,16 @@ PATH-like list of plugin directories. Defaults to
 conflicts. Generic — any distribution can compose extra plugin
 sources without rlock learning their config files.
 
-### bakeri.sh-side synthesis (in `bin/bake`)
+### snapcompose-side synthesis (in `bin/bake`)
 
-`bake run` (and any future `bake new` / `bake stop`) wraps `rl new`
+`snapc run` (and any future `bake new` / `bake stop`) wraps `rl new`
 with these steps:
 
-1. Parse `bakerish.toml` via rlock's shared `lib/toml.sh`. Run
+1. Parse `snapcompose.toml` via rlock's shared `lib/toml.sh`. Run
    `toml_validate` first — duplicate `[prebuild.<name>]` is an
    immediate error.
 2. For each `[prebuild.<name>]` section, generate a synthesised
-   plugin under `$PROJECT/.bakerish/plugins/_prebuild-<name>/`:
+   plugin under `$PROJECT/.snapcompose/plugins/_prebuild-<name>/`:
    - `plugin.toml`: `description`, `protocol_version = "1"`, `deps =
      [previous-section-name]` (preserving source order), `triggers
      = []`, `commands = []`, `[snapshot]` with declared `strategy`
@@ -195,11 +195,11 @@ with these steps:
      should invalidate, even if files don't); `snapshot_build()`
      runs the cmd via `aq exec`.
 3. For each `[on_start.<name>]`, generate or extend a single
-   `bake-prebuild-hooks` plugin's `start()` hook to run the cmd.
+   `snapc-prebuild-hooks` plugin's `start()` hook to run the cmd.
    (Or generate per-section start-hook plugins; smaller blast
    radius if one cmd fails.)
 4. Prepend the synth dir to `RLOCK_PLUGIN_PATH` —
-   `RLOCK_PLUGIN_PATH="$PROJECT/.bakerish/plugins:$RLOCK_PLUGIN_PATH"` —
+   `RLOCK_PLUGIN_PATH="$PROJECT/.snapcompose/plugins:$RLOCK_PLUGIN_PATH"` —
    so rlock's discover_plugins picks up the synthesised plugins
    alongside the existing user-global ones.
 5. Call `rl new <activated-plugins>` with the synthesised plugin
@@ -217,16 +217,16 @@ cache-invalidation logic, no race conditions. Idempotent.
 `_base` convention for framework-internal plugins. `discover_plugins`
 already filters `_`-prefixed plugins from triggers and CLI surfaces.
 
-### `.bakerish/plugins/` and gitignore
+### `.snapcompose/plugins/` and gitignore
 
 YAGNI for CI — every job starts on a clean runner. Don't add a
 `.gitignore` for this dir yet. Revisit if local-workflow users ask.
 
-## `bake run` lifecycle
+## `snapc run` lifecycle
 
 ### Auto-create on miss
 
-`bake run -- <cmd>` is the single entry command. Behaviour:
+`snapc run -- <cmd>` is the single entry command. Behaviour:
 
 - VM doesn't exist for project → run synthesis + `rl new` (creates
   VM, restores or builds chain) → SSH into VM → exec `<cmd>` → exit
@@ -235,7 +235,7 @@ YAGNI for CI — every job starts on a clean runner. Don't add a
   state mutation between calls.
 - VM exists but is stopped → `aq start` → exec → exit.
 
-No separate `bake new` / `bake create` step. The first `bake run`
+No separate `bake new` / `bake create` step. The first `snapc run`
 *is* creation. Power users wanting explicit control can still call
 `rl new` directly.
 
@@ -266,11 +266,11 @@ from the live-restore micro-bench).
 - **Sharded tests across many VMs in one CI job**: not the primary
   pattern; sharding is usually via GH Actions matrix (= separate
   runners = separate VMs by construction).
-- **`bake run --vm-suffix=<tag> -- <cmd>`**: override VM name to
+- **`snapc run --vm-suffix=<tag> -- <cmd>`**: override VM name to
   `<basename-of-project>-<tag>`. Lets a single job run e.g.
   `--vm-suffix=lint` and `--vm-suffix=test` against independent VMs
   in parallel. Each VM has its own state, separate from the default
-  `bake run` VM. Small `bake`-side addition.
+  `snapc run` VM. Small `bake`-side addition.
 
 ### Matrix sharding (typical CI pattern)
 
@@ -279,20 +279,20 @@ strategy:
   matrix:
     shard: [1, 2, 3, 4]
 steps:
-  - actions/cache (restore the bakeri.sh layer cache)
+  - actions/cache (restore the snapcompose layer cache)
   - bake run -- rspec --shard=${{ matrix.shard }}/4
   - actions/cache (save)
 ```
 
 Each shard = its own runner = its own VM. Layer cache is shared
 across shards (same `actions/cache` key derived from
-`bakerish.toml` + lockfile hashes). 4 parallel warm-restores at
+`snapcompose.toml` + lockfile hashes). 4 parallel warm-restores at
 ~2.7 s each = 4 VMs ready in 2.7 s wall-clock. The competitive
 edge vs Docker-based sharding.
 
 ## Cleanup: dep-installer plugin footguns
 
-Before shipping `bake-prebuild`, fix the silent-fallback pattern in
+Before shipping `snapc-prebuild`, fix the silent-fallback pattern in
 all 6 dep-installer plugins (`ruby-bundler`, `npm`, `pnpm`, `uv`,
 `poetry`, `cargo`):
 
@@ -314,32 +314,32 @@ that shouldn't be possible.
 
 ## GH CI workflow integration (parallel track)
 
-After `bake-prebuild` MVP ships:
+After `snapc-prebuild` MVP ships:
 
 ### Reference setup
 
-- `bakeri.sh/.github/workflows/example-bakerish-ci.yml` in the
-  bakeri.sh repo. Shows the canonical pattern: restore cache, run
-  `bake run`, save cache. Users copy-paste-adapt for their project.
+- `snapcompose/.github/workflows/example-snapcompose-ci.yml` in the
+  snapcompose repo. Shows the canonical pattern: restore cache, run
+  `snapc run`, save cache. Users copy-paste-adapt for their project.
 
 ### Cache mechanism
 
 **MVP: GitHub Actions native cache** (`actions/cache`). Free, no
 setup, ~10 GB per repo limit, 7-day retention without use. The cache
-key is derived from `hashFiles('bakerish.toml')` + lockfile hashes,
+key is derived from `hashFiles('snapcompose.toml')` + lockfile hashes,
 so any input change naturally moves to a new cache slot.
 
 **Roadmap (lower priority)**: OCI registry support for cross-repo /
 unlimited-size caches. Mirrors depot.dev's approach — chunk-level
-content-addressable storage. Tracked in bakeri.sh `TODO.md`.
+content-addressable storage. Tracked in snapcompose `TODO.md`.
 
 ### Action shape
 
 Either:
 
-- **Shell snippet in `example-bakerish-ci.yml`**: install bakeri.sh
-  + rlock + qemu, run `bake run`. More setup but visible.
-- **Packaged action `pirj/setup-bakerish@v1`**: encapsulates the
+- **Shell snippet in `example-snapcompose-ci.yml`**: install snapcompose
+  + rlock + qemu, run `snapc run`. More setup but visible.
+- **Packaged action `pirj/setup-snapcompose@v1`**: encapsulates the
   prereq install + cache-restore choreography. Cleaner UX.
 
 Probably ship both: snippet first (lower-overhead reference), action
@@ -347,36 +347,36 @@ second once usage patterns settle.
 
 ## Roadmap items captured
 
-These go into `bakeri.sh/TODO.md`:
+These go into `snapcompose/TODO.md`:
 
-- [ ] **bake-prebuild MVP** (this spec). Includes rlock's
+- [ ] **snapc-prebuild MVP** (this spec). Includes rlock's
   `RLOCK_PLUGIN_PATH` extension as a prereq.
-- [ ] **`bake run` auto-create + `--vm-suffix`**.
+- [ ] **`snapc run` auto-create + `--vm-suffix`**.
 - [ ] **Footgun fix in 6 dep-installer plugins** (`mise activate`
   swallow).
 - [ ] **GH Actions CI integration**: example workflow YAML, action
   package, docs.
 - [ ] **`plugin = "<name>"` reference in `[prebuild.<name>]`** — for
   interleaving prebuild steps between existing plugins. Pivots
-  bakerish.toml to be the authoritative chain spec. Deferred until
+  snapcompose.toml to be the authoritative chain spec. Deferred until
   prebuild MVP demonstrates the need.
 - [ ] **OCI registry cache transport** (alt to GH Actions native
   cache) for cross-repo / unlimited size.
 - [ ] **Local PR isolation as a future separate tool (p.rlock)** —
-  not bakeri.sh scope; captured here so bakeri.sh roadmap doesn't
+  not snapcompose scope; captured here so snapcompose roadmap doesn't
   absorb it.
 
 ## Documentation to write
 
 After implementation:
 
-- `bakeri.sh/docs/bakerish-toml.md` — format reference. Every section,
+- `snapcompose/docs/snapcompose-toml.md` — format reference. Every section,
   every field, examples per ecosystem.
-- `bakeri.sh/docs/writing-a-plugin.md` — pattern for ecosystem-
+- `snapcompose/docs/writing-a-plugin.md` — pattern for ecosystem-
   specific cases that don't fit the prebuild model (positioning,
   unusual cache keys, custom triggers). Aimed at users who outgrew
   `[prebuild.<name>]`.
-- `bakeri.sh/docs/ci-integration.md` — once GH Actions integration
+- `snapcompose/docs/ci-integration.md` — once GH Actions integration
   lands.
 
 ## What `[prebuild.<name>]` does NOT cover
@@ -391,6 +391,6 @@ For honest scoping, things this design intentionally doesn't address:
   still runs and presumably no-ops or fails. Users who want
   conditional activation should write their own plugin with a
   `snapshot_should_skip` hook.
-- **Cross-project shared prebuild definitions**. Each `bakerish.toml`
+- **Cross-project shared prebuild definitions**. Each `snapcompose.toml`
   is project-local. Multi-project shared snippets are a future doc
   pattern, not a code feature.

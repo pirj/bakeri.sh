@@ -14,7 +14,7 @@ snapshot_build() {
 set -eu
 apk add docker docker-cli-compose
 # rlock is the unprivileged user prebuild commands run as (see
-# bake-prebuild-template's `su -l rlock`). Without docker-group
+# snapc-prebuild-template's `su -l rlock`). Without docker-group
 # membership, `docker compose` fails with permission denied on
 # /var/run/docker.sock. addgroup is busybox-compatible.
 addgroup rlock docker

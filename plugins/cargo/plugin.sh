@@ -57,7 +57,7 @@ command -v cargo >/dev/null 2>&1
 # `cargo fetch` downloads all dependencies declared in Cargo.lock into
 # ~/.cargo/registry. It does NOT compile — that's deliberate: compile
 # artifacts depend on profile (debug/release) and features and are
-# expensive to share. Compile happens at `bake run` time on top of this.
+# expensive to share. Compile happens at `snapc run` time on top of this.
 cargo fetch --locked
 RLOCK
 SH

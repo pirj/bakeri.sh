@@ -2,17 +2,17 @@
 
 ## Scope
 
-bakeri.sh is a distribution of plugins on top of rlock targeted at CI
+snapcompose is a distribution of plugins on top of rlock targeted at CI
 workloads. Security boundary considerations specific to this
 distribution:
 
-- `bake pr <pr-ref>` runs untrusted PR code in the VM. The framework's
-  VM isolation (rlock) is the boundary; bakeri.sh's `bake-pr`
+- `snapc pr <pr-ref>` runs untrusted PR code in the VM. The framework's
+  VM isolation (rlock) is the boundary; snapcompose's `snapc-pr`
   shouldn't widen it by reaching into host state from the PR's
   context.
 - `docker-registry-cache` runs a host-side OCI registry proxy on
   `127.0.0.1:5000`. Should not be exposed beyond loopback.
-- `[on_start.<name>]` cmds in `bakerish.toml` run on every `bake run`
+- `[on_start.<name>]` cmds in `snapcompose.toml` run on every `snapc run`
   with host-side credentials available; the file is project-trusted
   by definition, but should never echo secrets to the guest.
 
@@ -28,10 +28,10 @@ distribution:
 ## Reporting
 
 Open a private security advisory at
-[https://github.com/pirj/bakeri.sh/security/advisories/new](https://github.com/pirj/bakeri.sh/security/advisories/new).
+[https://github.com/pirj/snapcompose/security/advisories/new](https://github.com/pirj/snapcompose/security/advisories/new).
 
 If GitHub advisories aren't suitable, email pirjsuka@gmail.com with
-"bakeri.sh security" in the subject.
+"snapcompose security" in the subject.
 
 Don't open a public issue for a credible vulnerability before the
 maintainer has acknowledged it.

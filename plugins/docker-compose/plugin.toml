@@ -4,7 +4,7 @@ protocol_version = "1"
 # `docker-registry-cache` was previously listed here too, but the cache
 # is a pure-optimisation layer — without it, guests pull straight from
 # docker.io (slower first cold; warm path unaffected). Forcing the host
-# `registry` binary on every bakeri.sh user is too strong a price for
+# `registry` binary on every snapcompose user is too strong a price for
 # one optimisation. Users who want it: add `docker-registry-cache`
 # explicitly on the `rl new` command line.
 deps = ["docker-engine"]

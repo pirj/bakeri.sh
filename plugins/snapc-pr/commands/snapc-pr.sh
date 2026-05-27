@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# bake-pr — run a remote PR/MR (or local branch) in the project's
-# bakeri.sh VM without giving the VM network access to an untrusted
+# snapc-pr — run a remote PR/MR (or local branch) in the project's
+# snapcompose VM without giving the VM network access to an untrusted
 # fork.
 #
 # Usage:
-#   rl bake-pr [--cmd '<command>'] [--no-isolation] <ref>
+#   rl snapc-pr [--cmd '<command>'] [--no-isolation] <ref>
 #
 # <ref> forms supported:
 #   GitHub PR:   https://github.com/<owner>/<repo>/pull/<N>
@@ -56,7 +56,7 @@ if [[ -z "$CMD_TO_RUN" && $# -gt 0 ]]; then
 fi
 
 if [[ -z "$PR_REF" ]]; then
-    stderr "Usage: rl bake-pr [--cmd '<command>'] [--no-isolation] <ref>"
+    stderr "Usage: rl snapc-pr [--cmd '<command>'] [--no-isolation] <ref>"
     exit 2
 fi
 if [[ -z "$CMD_TO_RUN" ]]; then
@@ -162,8 +162,8 @@ else
     esac
     IFS=$'\t' read -r FORK_URL REF_SUFFIX PR_BRANCH PR_SHA <<<"$resolved"
 
-    LOCAL_REF="refs/_bake_pr/${REF_SUFFIX}"
-    TMP_REMOTE="_bake_pr_remote_$$"
+    LOCAL_REF="refs/_snapc_pr/${REF_SUFFIX}"
+    TMP_REMOTE="_snapc_pr_remote_$$"
     info "PR ${PR_REF} -> ${PR_BRANCH} @ ${PR_SHA:0:12}"
 
     cleanup() {
@@ -185,10 +185,10 @@ else
     fi
 fi
 
-# Ensure the bakeri.sh VM exists and the `rl` remote is configured.
+# Ensure the snapcompose VM exists and the `rl` remote is configured.
 vm_name=$(resolve_vm_name 2>/dev/null) || vm_name="$(basename "$(pwd)")"
 if [[ ! -d "${AQ_STATE_DIR:-}/$vm_name" ]]; then
-    stderr "Error: VM for this project not found. Run 'rl new' first (or 'rl bake-run -- :' to provision)."
+    stderr "Error: VM for this project not found. Run 'rl new' first (or 'rl snapc-run -- :' to provision)."
     exit 1
 fi
 if ! git remote get-url rl >/dev/null 2>&1; then
@@ -197,15 +197,15 @@ if ! git remote get-url rl >/dev/null 2>&1; then
 fi
 
 info "Pushing ref into VM..."
-git push -f rl "${LOCAL_REF}:refs/heads/_bake_pr" >/dev/null 2>&1 || {
+git push -f rl "${LOCAL_REF}:refs/heads/_snapc_pr" >/dev/null 2>&1 || {
     stderr "Error: git push to VM failed."
     exit 1
 }
 
 # Execute the command in the VM, checked out to the pushed ref.
-info "Running command in VM (checked out to _bake_pr)..."
+info "Running command in VM (checked out to _snapc_pr)..."
 set +e
-do_ssh "$vm_name" "cd ~/repo && git checkout _bake_pr >/dev/null && bash -lc '$CMD_TO_RUN'"
+do_ssh "$vm_name" "cd ~/repo && git checkout _snapc_pr >/dev/null && bash -lc '$CMD_TO_RUN'"
 rc=$?
 set -e
 

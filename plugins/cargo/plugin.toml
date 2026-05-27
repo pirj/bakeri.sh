@@ -10,6 +10,6 @@ commands = []
 # project's target/ dir survive across builds, so `cargo fetch` only
 # pulls the delta. The plugin intentionally stops at `fetch` (not
 # `build`) — target/ contents depend on profile + features and users
-# usually drive compilation themselves from `bake run`.
+# usually drive compilation themselves from `snapc run`.
 strategy = "incremental"
 kind = "cold"

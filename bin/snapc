@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# bake — thin wrapper around `rl bake-<subcommand>` for the bakeri.sh
-# distribution. Lets users type `bake run`, `bake pr`, `bake cache`
-# instead of the longer `rl bake-run`, `rl bake-pr`, `rl bake-cache`.
+# snapc — thin wrapper around `rl snapc-<subcommand>` for the snapcompose
+# distribution. Lets users type `snapc run`, `snapc pr`, `snapc cache`
+# instead of the longer `rl snapc-run`, `rl snapc-pr`, `rl snapc-cache`.
 #
 # Examples:
-#   bake run -- npm test
-#   bake pr --cmd 'rake test' https://github.com/o/r/pull/1
-#   bake cache
-#   bake cache --rm ruby-bundler
+#   snapc run -- npm test
+#   snapc pr --cmd 'rake test' https://github.com/o/r/pull/1
+#   snapc cache
+#   snapc cache --rm ruby-bundler
 
 set -eu
 
 usage() {
     cat <<EOF
-Usage: bake <subcommand> [args...]
+Usage: snapc <subcommand> [args...]
 
 Subcommands:
   run [--no-push] -- <command>         run a command in the project VM

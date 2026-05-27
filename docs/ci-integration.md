@@ -1,6 +1,6 @@
 # GitHub Actions CI integration
 
-bakeri.sh's headline use case is GitHub Actions. The pattern in this
+snapcompose's headline use case is GitHub Actions. The pattern in this
 doc gets you from "no CI" to "second-run sub-second-warm CI" by
 copy-pasting one workflow file and adapting the test command.
 
@@ -14,19 +14,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pirj/setup-bakerish@v2
-      - run: bake run -- bundle exec rspec
+      - uses: pirj/setup-snapcompose@v2
+      - run: snapc run -- bundle exec rspec
 ```
 
-`pirj/setup-bakerish@v2` is a composite action that does the install
-(qemu + ovmf + tio + aq/rlock/bakeri.sh) + cache restore + auto-save
+`pirj/setup-snapcompose@v2` is a composite action that does the install
+(qemu + ovmf + tio + aq/rlock/snapcompose) + cache restore + auto-save
 in one step. See its
-[README](https://github.com/pirj/setup-bakerish) for inputs (cache
+[README](https://github.com/pirj/setup-snapcompose) for inputs (cache
 key segmentation, `AQ_NO_SNAPSHOT_COMPRESS=1`, ref pinning, etc.).
 
 For the expanded inline form (when you need to customize a step or
 audit what runs under the hood), see
-[`docs/example-bakerish-ci.yml`](example-bakerish-ci.yml) — it
+[`docs/example-snapcompose-ci.yml`](example-snapcompose-ci.yml) — it
 ships both the packaged form and the unrolled equivalent side by
 side. Don't roll your own host-deps install: at minimum you need
 `qemu-system-x86 qemu-utils ovmf socat wget zstd` plus a
@@ -84,7 +84,7 @@ strategy:
 steps:
   - uses: actions/checkout@v4
   - … (install + cache restore — same as TL;DR) …
-  - run: bake run -- bundle exec rspec --shard=${{ matrix.shard }}/4
+  - run: snapc run -- bundle exec rspec --shard=${{ matrix.shard }}/4
 ```
 
 Each shard is a separate GH runner = separate filesystem = separate VM.
@@ -95,13 +95,13 @@ ready-to-run VMs in 2.7 s wall-clock.
 
 ## Running multiple commands in one job
 
-Multiple `bake run` invocations in the same job reuse the same VM —
-each `bake run` is a sub-second SSH exec after the first:
+Multiple `snapc run` invocations in the same job reuse the same VM —
+each `snapc run` is a sub-second SSH exec after the first:
 
 ```yaml
-- run: bake run -- bundle exec rspec
-- run: bake run -- bundle exec rubocop
-- run: bake run -- npm run lint
+- run: snapc run -- bundle exec rspec
+- run: snapc run -- bundle exec rubocop
+- run: snapc run -- npm run lint
 ```
 
 No teardown between them. Each command's exit code propagates as the
@@ -123,11 +123,11 @@ gets its own state and snapshot cache slot. The cache RESTORE step
 above still seeds both — they share `~/.local/share/aq/cache/` (which
 keys by `(plugin, snapshot_key)`, not by VM name).
 
-Caveat for local mixed-suffix use: bake-run reconfigures the `rl`
-git remote on every `rl new`, so if you alternate `bake run
---vm-suffix=A` and `bake run --vm-suffix=B` from the same project
+Caveat for local mixed-suffix use: snapc-run reconfigures the `rl`
+git remote on every `rl new`, so if you alternate `snapc run
+--vm-suffix=A` and `snapc run --vm-suffix=B` from the same project
 dir, the rl remote points at whichever VM was last provisioned. The
-push step inside bake-run may go to the wrong VM. On CI this is a
+push step inside snapc-run may go to the wrong VM. On CI this is a
 non-issue (each shard's runner has its own filesystem).
 
 ## Two-tier cache (GH cache + OCI fallback)
@@ -143,23 +143,23 @@ ephemeral), OCI fallback when the GH cache evicts or misses.
 steps:
   - uses: actions/checkout@v4
 
-  - uses: pirj/setup-bakerish@v2
+  - uses: pirj/setup-snapcompose@v2
     with:
-      oci-cache-ref: ghcr.io/${{ github.repository_owner }}/bakerish-cache:latest
+      oci-cache-ref: ghcr.io/${{ github.repository_owner }}/snapcompose-cache:latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  - run: bake run -- bundle exec rspec
+  - run: snapc run -- bundle exec rspec
 
   # Push on main only — avoid per-PR-commit churn in the long-term store.
   - name: Push cache to OCI (main only)
     if: always() && github.ref == 'refs/heads/main'
-    run: bake cache --push ghcr.io/${{ github.repository_owner }}/bakerish-cache:latest
+    run: snapc cache --push ghcr.io/${{ github.repository_owner }}/snapcompose-cache:latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-`bake cache --push` is **per-layer**: each `(plugin, snapshot_key)`
+`snapc cache --push` is **per-layer**: each `(plugin, snapshot_key)`
 slot becomes its own blob in the OCI artifact. Identical slot
 content across pushes dedups server-side by sha256, so an unchanged
 `_base` / `docker-engine` / `ruby-bundler` slot doesn't re-upload —
@@ -174,7 +174,7 @@ include `packages: write` for push, `packages: read` for pull-only
 jobs.
 
 **Cache TTL**: GHCR has no automatic eviction — blobs persist until
-deleted. Run a periodic GC job (`bake cache --gc <ref>` — TBD
+deleted. Run a periodic GC job (`snapc cache --gc <ref>` — TBD
 roadmap) to prune stale layer manifests; or rely on registry-side
 lifecycle policies when the provider supports them (ECR does, GHCR
 doesn't yet).
@@ -203,7 +203,7 @@ roadmap):
 
 ## Self-hosted runners
 
-bakeri.sh works on self-hosted runners with no extra setup, provided
+snapcompose works on self-hosted runners with no extra setup, provided
 the host has qemu + KVM and zstd installed (typically the case on
 modern Linux distros). The cache dir `~/.local/share/aq/cache`
 persists across jobs naturally if the runner is configured with
@@ -215,7 +215,7 @@ both the warm-snapshot win AND the no-network-cache-fetch win.
 
 ## macOS runners
 
-bakeri.sh works on macOS runners too (`runs-on: macos-latest`), but:
+snapcompose works on macOS runners too (`runs-on: macos-latest`), but:
 
 - HVF acceleration on Apple Silicon runners (`macos-14`) needs the
   QEMU 11.0.0 HVF live-restore workaround currently active in aq
@@ -240,7 +240,7 @@ file layout. If `Gemfile.lock` is in a sub-directory you didn't
 include, every lockfile bump invalidates the cache for the wrong
 reason. Use `**/Gemfile.lock` for monorepos.
 
-### `bake run` times out on first run
+### `snapc run` times out on first run
 
 First cold runs through the full snapshot chain — for a Rails+PG
 fixture this is ~4 minutes. If your project is much bigger (heavy
@@ -251,11 +251,11 @@ hygiene.
 
 ## See also
 
-- [`bakerish-toml.md`](bakerish-toml.md) — project config format.
+- [`snapcompose-toml.md`](snapcompose-toml.md) — project config format.
 - [`writing-a-plugin.md`](writing-a-plugin.md) — escape hatch when
   prebuild doesn't fit.
-- `superpowers/specs/2026-05-20-bakerish-toml-and-prebuild.md` —
+- `superpowers/specs/2026-05-20-snapcompose-toml-and-prebuild.md` —
   design spec.
-- bakeri.sh's `TODO.md` "North-star: GitHub Actions CI integration"
-  section — roadmap (packaged `setup-bakerish` action, OCI registry
+- snapcompose's `TODO.md` "North-star: GitHub Actions CI integration"
+  section — roadmap (packaged `setup-snapcompose` action, OCI registry
   transport, etc.).

@@ -3,8 +3,8 @@
 setup() {
     load 'test_helper/common'
     _common_setup
-    PLUGIN_DIR="$PROJECT_ROOT/plugins/bake-pr"
-    CMD="$PLUGIN_DIR/commands/bake-pr.sh"
+    PLUGIN_DIR="$PROJECT_ROOT/plugins/snapc-pr"
+    CMD="$PLUGIN_DIR/commands/snapc-pr.sh"
 
     STUB_LIB="$BATS_TEST_TMPDIR/stub_lib"
     mkdir -p "$STUB_LIB"
@@ -20,40 +20,40 @@ do_ssh()          { echo "DOSSH:$*"; return 0; }
 STUB
 }
 
-@test "bake-pr plugin declares the bake-pr command" {
-    run grep -q 'commands *= *\["bake-pr"\]' "$PLUGIN_DIR/plugin.toml"
+@test "snapc-pr plugin declares the snapc-pr command" {
+    run grep -q 'commands *= *\["snapc-pr"\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
 
-@test "bake-pr plugin declares git as the only unconditional host dep" {
+@test "snapc-pr plugin declares git as the only unconditional host dep" {
     run grep -q 'host_deps *= *\["git"\]' "$PLUGIN_DIR/plugin.toml"
     assert_success
 }
 
-@test "bake-pr plugin has no [snapshot] section (command-only)" {
+@test "snapc-pr plugin has no [snapshot] section (command-only)" {
     run grep -q '^\[snapshot\]' "$PLUGIN_DIR/plugin.toml"
     assert_failure
 }
 
-@test "bake-pr exits 2 when no PR ref given" {
+@test "snapc-pr exits 2 when no PR ref given" {
     run env RL_LIB_DIR="$STUB_LIB" bash "$CMD"
     assert_failure 2
     assert_output --partial "Usage:"
 }
 
-@test "bake-pr exits 2 when --cmd missing" {
+@test "snapc-pr exits 2 when --cmd missing" {
     run env RL_LIB_DIR="$STUB_LIB" bash "$CMD" https://github.com/owner/repo/pull/123
     assert_failure 2
     assert_output --partial "--cmd is required"
 }
 
-@test "bake-pr exits 2 on unknown flag" {
+@test "snapc-pr exits 2 on unknown flag" {
     run env RL_LIB_DIR="$STUB_LIB" bash "$CMD" --bogus
     assert_failure 2
     assert_output --partial "unknown flag"
 }
 
-@test "bake-pr parses --cmd flag (separate or =) before invoking gh" {
+@test "snapc-pr parses --cmd flag (separate or =) before invoking gh" {
     # Replace `gh` with a failing stub so we don't actually hit the
     # network, but get past the arg parsing.
     local bin_stub="$BATS_TEST_TMPDIR/bin"
@@ -66,21 +66,21 @@ GH
     chmod +x "$bin_stub/gh"
 
     PATH="$bin_stub:$PATH" run env RL_LIB_DIR="$STUB_LIB" bash "$CMD" --cmd 'echo hi' https://github.com/owner/repo/pull/1
-    # gh fails → bake-pr surfaces the failure (exit 1) — but it DID get
+    # gh fails → snapc-pr surfaces the failure (exit 1) — but it DID get
     # past arg parsing.
     assert_failure 1
     assert_output --partial "STUB GH FAILED"
     refute_output --partial "--cmd is required"
 }
 
-@test "bake-pr rejects unrecognised ref without --no-isolation" {
+@test "snapc-pr rejects unrecognised ref without --no-isolation" {
     run env RL_LIB_DIR="$STUB_LIB" bash "$CMD" --cmd 'echo hi' my-branch
     assert_failure 2
     assert_output --partial "not a recognised GitHub/GitLab PR URL"
     assert_output --partial "--no-isolation"
 }
 
-@test "bake-pr routes gitlab URL to glab (runtime-checked)" {
+@test "snapc-pr routes gitlab URL to glab (runtime-checked)" {
     # No glab on PATH — script must fail with the platform-specific
     # install hint, NOT with a github-specific one.
     PATH="$BATS_TEST_TMPDIR/empty-bin:$PATH" \
@@ -91,7 +91,7 @@ GH
     refute_output --partial "gh CLI not installed"
 }
 
-@test "bake-pr --no-isolation skips PR resolution entirely" {
+@test "snapc-pr --no-isolation skips PR resolution entirely" {
     # Build a tiny local git repo so `git rev-parse HEAD` resolves, and
     # configure an `rl` remote that just sinks pushes (a local bare repo).
     local sink="$BATS_TEST_TMPDIR/sink.git"
@@ -113,6 +113,6 @@ GH
     # do_ssh stub echoes its args — verify we got there.
     assert_output --partial "DOSSH:stub-vm"
     # And verify the sink received the push under the expected ref.
-    run git --git-dir="$sink" rev-parse refs/heads/_bake_pr
+    run git --git-dir="$sink" rev-parse refs/heads/_snapc_pr
     assert_success
 }

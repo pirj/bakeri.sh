@@ -1,6 +1,6 @@
 # Writing a custom plugin
 
-`[prebuild.<name>]` in `bakerish.toml` covers ~80% of project-specific
+`[prebuild.<name>]` in `snapcompose.toml` covers ~80% of project-specific
 build steps with a few lines of TOML. This doc is for the other 20% —
 when you need a custom rlock plugin.
 
@@ -24,7 +24,7 @@ want:
   defaults. For `[snapshot] memory = "8G"` or `kind = "live"`, you
   need plugin.toml access.
 - **Provision-time setup separate from snapshot layers.** Things that
-  shouldn't be cached but also shouldn't run every `bake run` — e.g.
+  shouldn't be cached but also shouldn't run every `snapc run` — e.g.
   installing dev-only host packages once per VM provision. Use the
   `provision` hook (runs once, after the chain).
 
@@ -56,10 +56,10 @@ rlock discovers plugins from every directory on `RLOCK_PLUGIN_PATH`
   `RLOCK_PLUGIN_PATH` in your shell setup or in
   `.envrc` / direnv config. Git-tracked, travels with the project.
 
-bakeri.sh's `bake run` already manages `RLOCK_PLUGIN_PATH` for
+snapcompose's `snapc run` already manages `RLOCK_PLUGIN_PATH` for
 synthesised prebuild plugins — if you want to also drop in a custom
 plugin per-project, you'll need to extend the env setup yourself
-(roadmap: a `[plugins] path = [...]` field in `bakerish.toml`).
+(roadmap: a `[plugins] path = [...]` field in `snapcompose.toml`).
 
 ## plugin.toml
 
@@ -280,25 +280,25 @@ fi
 
 Read these for working examples of each pattern:
 
-- **Cold cached, content-hashed**: `bakeri.sh/plugins/mise/`.
+- **Cold cached, content-hashed**: `snapcompose/plugins/mise/`.
 - **Cold cached, constant key (one-shot per host)**:
   `rlock/plugins/_base/`, `rlock/plugins/git/`,
-  `bakeri.sh/plugins/docker-engine/`,
-  `bakeri.sh/plugins/docker-registry-cache/`.
+  `snapcompose/plugins/docker-engine/`,
+  `snapcompose/plugins/docker-registry-cache/`.
 - **Cold incremental (lockfile-driven)**:
-  `bakeri.sh/plugins/ruby-bundler/`, `npm/`, `pnpm/`, `uv/`,
+  `snapcompose/plugins/ruby-bundler/`, `npm/`, `pnpm/`, `uv/`,
   `poetry/`, `cargo/`.
-- **Live kind**: `bakeri.sh/plugins/docker-compose/` — pause + memory
+- **Live kind**: `snapcompose/plugins/docker-compose/` — pause + memory
   capture + resume; the `[snapshot] memory = "4G"` declaration; the
   per-service healthcheck wait inside `snapshot_build`.
-- **Command-only (no snapshot)**: `bakeri.sh/plugins/bake-run/`,
-  `bake-pr/`, `bake-cache/`. `triggers = []`, `commands = [...]`.
+- **Command-only (no snapshot)**: `snapcompose/plugins/snapc-run/`,
+  `snapc-pr/`, `snapc-cache/`. `triggers = []`, `commands = [...]`.
 - **Provision-only (no snapshot, no command)**: `ai.rlock`'s
   `auth-proxy` (provisioning the in-VM proxy config).
 
 ## Testing your plugin
 
-Use bats. The pattern repeated across bakeri.sh's plugins:
+Use bats. The pattern repeated across snapcompose's plugins:
 
 ```bash
 # test/my_plugin.bats
@@ -335,7 +335,7 @@ fixture.
 
 ## See also
 
-- `bakerish-toml.md` — for cases that DO fit `[prebuild.<name>]`,
+- `snapcompose-toml.md` — for cases that DO fit `[prebuild.<name>]`,
   start there. This doc is the escape hatch.
 - `rlock/docs/superpowers/specs/2026-04-22-plugin-architecture.md` —
   full plugin protocol spec (historical but still accurate on the
