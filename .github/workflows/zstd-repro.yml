@@ -57,3 +57,27 @@ jobs:
           brew install zstd coreutils
           zstd --version
           bash .github/repro/zstd-patch-from-repro.sh
+
+  qemu-real-memory-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install qemu + zstd + KVM access
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 socat zstd curl
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run qemu repro
+        run: bash .github/repro/zstd-patch-qemu-repro.sh
+
+  qemu-real-memory-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install qemu + zstd
+        run: brew install qemu zstd coreutils socat
+      - name: Run qemu repro
+        run: bash .github/repro/zstd-patch-qemu-repro.sh
