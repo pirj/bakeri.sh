@@ -38,11 +38,11 @@ case "$sub" in
     help|--help|-h) usage; exit 0 ;;
 esac
 
-# Each subcommand maps to `rl bake-<sub>`. `rl` lives on PATH (rlock
+# Each subcommand maps to `rl snapc-<sub>`. `rl` lives on PATH (rlock
 # checkout's bin/ added by the user).
 if ! command -v rl >/dev/null 2>&1; then
     echo "Error: 'rl' not on PATH. Install rlock (https://github.com/pirj/rlock) and add its bin/ to PATH." >&2
     exit 1
 fi
 
-exec rl "bake-$sub" "$@"
+exec rl "snapc-$sub" "$@"
