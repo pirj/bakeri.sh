@@ -70,6 +70,17 @@ We've experimented with:
 - Without `--long=31` — encoder errors because reference exceeds default 128 MiB window.
 - `--long=32` — same failure.
 
+**Build-flag bisection of the zstd 1.5.7 source we ship on the failing runner** — each row rebuilds from `v1.5.7` tag, on the same `ubuntu-latest` Azure x86_64 KVM runner, runs the same round-trip:
+
+| Build flags | Result |
+|---|---|
+| `make zstd HAVE_PTHREAD=1` (default) | **FAIL** |
+| `make zstd HAVE_PTHREAD=1 ZSTD_NO_ASM=1` (drops `huf_decompress_amd64.S`) | **FAIL** |
+| `make zstd HAVE_PTHREAD=1 ZSTD_NO_ASM=1`, `CFLAGS="-DZSTD_NO_INTRINSICS"` (drops `_mm_*` + BMI2 C intrinsics) | **FAIL** |
+| `make zstd HAVE_PTHREAD=1 ZSTD_NO_ASM=1`, `CFLAGS="-DZSTD_NO_INTRINSICS -O0 -fno-tree-vectorize"` (also kills compiler auto-vectorization) | **FAIL** |
+
+So the bug is NOT in the hand-written x86_64 asm, NOT in explicit SSE/BMI2 intrinsics, and NOT in compiler-emitted SIMD. The triangulation with TCG (passes) vs native x86_64 KVM (fails) strongly suggests an **uninitialized-memory read** somewhere in the LDM / `--patch-from` code path — TCG tends to zero-initialize while native execution gives whatever was in the allocator's heap; the resulting "garbage" differs, and the encoder's match positions encode the garbage, producing a patch whose decode (on the same machine with re-allocated heap and different garbage) reconstructs different bytes than the original target. Consistent with the failure mode (encoder/decoder reference is byte-identical; patch round-trip is not), with the platform pattern (only x86_64 native; aarch64 native + TCG x86_64 pass), and with the workload sensitivity (synthetic data doesn't reach the buggy code path; specific qemu memory contents do).
+
 We've kept the original `memory.bin.zst` that triggers this and can supply it privately to maintainers if it helps. PATCH_DIAG sha256 diagnostic instrumentation in our wrapper (aq v2.5.38, rlock v0.1.10) confirms encode/decode reference bytes are identical, ruling out compression non-determinism between the two sides.
 
 Happy to test fixes against our pipeline once a candidate lands in `dev` branch.
