@@ -1,86 +1,85 @@
-# Bug report draft for facebook/zstd
+# RETRACTED — not a zstd bug
 
-To be filed at https://github.com/facebook/zstd/issues/new?template=bug_report.md
+This draft alleged a `zstd --patch-from` corruption on Linux x86_64 native
+when used against ~1.7 GiB qemu live-snapshot memory dumps with `--long=31`.
 
----
+**It was wrong.** zstd is fine. The bug was in our own `_snapshot_reconstruct_memory_chain`
+implementation in [`rlock/lib/snapshot.sh`](https://github.com/pirj/rlock/blob/main/lib/snapshot.sh).
+Fixed in `rlock v0.1.11`.
 
-**Title:** `--patch-from` on Linux produces patches whose decoder reports "Restored data doesn't match checksum" (XXH64) for ~1.6 GiB qemu live-snapshot memory references with --long=31
+## What actually happened
 
-**Describe the bug**
+`snapshot_save` walks back to the most-recent FULL ancestor (a layer with
+`memory.bin.zst`) and encodes the leaf's memory delta as a single
+`.zstpatch` against THAT ancestor's raw bytes. So on a chain
+`[compose(full) → git(patch) → pg-prewarm(patch)]`, both `git.zstpatch`
+and `pg-prewarm.zstpatch` are encoded against `compose.raw`, NOT against
+each other.
 
-`zstd --patch-from=<ref> <target> -o <patch> --long=31` produces a patch file whose decoder, fed the SAME (byte-identical) reference, errors out with:
+The restore side was applying patches **sequentially** through the chain:
 
 ```
-<patch> : Decoding error (36) : Restored data doesn't match checksum
+base = decompress(compose.zst)
+base' = apply(git.zstpatch, base)         # ok — git was encoded against compose
+base'' = apply(pg-prewarm.zstpatch, base')   # WRONG — pg-prewarm was encoded against compose, not git_reconstructed
 ```
 
-Encoder and decoder run consecutively on the same machine, against the same on-disk reference (verified byte-identical via `sha256sum` on both sides — `e6b527233120bf21640fef82dd8d10fc7ab2142bb15928f2a4e3d169adf3c14a` in our case). The reference is a 1.6–1.7 GiB QEMU live-snapshot memory dump; the target differs by a ~5–10 MiB region near the middle.
+The second step fed `pg-prewarm.zstpatch` an input it was never encoded
+against → garbage output → zstd's XXH64 frame checksum tripped → error 36
+"Restored data doesn't match checksum".
 
-**Triangulation table** (all four with `zstd 1.5.7`, same 1.65 GiB memory dump, same `zstd -q --long=31 --patch-from=ref new -o patch` + `zstd -d --long=31 --patch-from=ref patch -o out` round-trip):
+## Why we mis-blamed zstd
 
-| Platform | CPU path | Result |
-|---|---|---|
-| macOS aarch64 (M3) brew zstd 1.5.7 | aarch64 native (Apple Silicon) | **PASS** |
-| Linux aarch64 Alpine (HVF guest on M3) zstd 1.5.7 | aarch64 native | **PASS** |
-| Linux x86_64 Alpine **TCG-emulated** on M3 zstd 1.5.7 | TCG translated x86_64 | **PASS** |
-| Linux x86_64 Alpine **KVM** on Azure CI zstd 1.5.5 + 1.5.7 | x86_64 native (Intel/AMD) | **FAIL** |
+- Platform asymmetry was a red herring. M3 local fixture chain depth was
+  2 (no git layer auto-detected), CI fixture chain depth was 3 (git layer
+  auto-detected because `.git` exists in the repo). Depth-2 only does
+  one patch-apply step which happened to be correct; depth-3 triggered
+  the buggy second step.
+- TCG vs native KVM was a red herring. Both ran the same buggy
+  reconstruction logic; both would have failed if the TCG fixture had
+  chain depth ≥3.
+- Build-flag bisection (`ZSTD_NO_ASM=1`, `-DZSTD_NO_INTRINSICS`,
+  `-O0 -fno-tree-vectorize`) all showed "FAIL" — because the bug wasn't
+  in zstd at all, so disabling parts of zstd didn't help.
 
-The TCG row is the smoking gun: same `zstd 1.5.7` x86_64 ELF binary, same memory file, same Linux Alpine guest setup, same QEMU host process. The only thing that differs is whether the underlying CPU runs native x86_64 SIMD instructions or TCG's scalar translation of them. TCG passes; native fails.
+## How we found it
 
-**This points to a bug in zstd's x86_64-native SIMD code path** (LDM or patch-from), not the format itself.
+The post-failure valgrind step in
+[`.github/workflows/benchmark-r17-r18.yml`](https://github.com/pirj/snapcompose-rails-pg-example/blob/main/.github/workflows/benchmark-r17-r18.yml)
+ran the same zstd decode against the same on-disk `.zstpatch` files in
+isolation and showed **PASS**. That is: the same `zstd` binary, same
+patch file, same reference file, but invoked standalone, succeeded.
+That ruled out zstd and pointed at the orchestration around it.
 
-**Reproduction is also workload-sensitive.** Synthetic inputs do NOT reproduce, even on the same x86_64 native runner:
-- 1.7 GiB random data + 5 MiB delta + --long=31 → **passes** on all platforms.
-- 1.7 GiB ~60% zero pages + ~30% repeating pages + ~10% random + 5 MiB delta + --long=31 → **passes** on all platforms.
-- Real Alpine ISO live-boot memory dump (~175 MiB) + 5 MiB delta + --long=31 → **passes** on all platforms.
-- Real docker-compose+postgres live-snapshot memory dump (~1.65 GiB) + 5 MiB delta + --long=31 → **fails consistently on Linux, passes on macOS**.
+## Fix
 
-The triggering pattern is something specific to qemu-savevm output of a guest running a postgres + docker stack — possibly the distribution of shared_buffers + page tables + page cache that doesn't show up in synthetic input.
+`_snapshot_reconstruct_memory_chain` now walks back to the chain base
+(first `memory.bin.zst` ancestor), decompresses it, and applies the
+LEAF's `.zstpatch` directly against the base — skipping every
+intermediate `.zstpatch` layer. This matches the encoder's semantics.
 
-**To Reproduce**
+```bash
+_snapshot_reconstruct_memory_chain() {
+    local leaf_cache_dir="$1" out_raw="$2"
+    local base="$leaf_cache_dir"
+    while [[ -f "$base/memory.bin.zstpatch" && ! -f "$base/memory.bin.zst" ]]; do
+        base=$(_snapshot_parent_dir "$base")
+    done
+    zstd -dc "$base/memory.bin.zst" > "$out_raw"
+    if [[ "$leaf_cache_dir" != "$base" ]]; then
+        local leaf_patch="$leaf_cache_dir/memory.bin.zstpatch"
+        zstd -dc --long=31 --patch-from="$out_raw" "$leaf_patch" > "$out_raw.tmp"
+        mv "$out_raw.tmp" "$out_raw"
+    fi
+}
+```
 
-The shortest reliable reproduction is the [`pirj/snapcompose-rails-pg-example`](https://github.com/pirj/snapcompose-rails-pg-example) `benchmark-r17-r18` GitHub Actions workflow:
+## Takeaways for next time
 
-1. Fork the repo (or use as-is).
-2. Run the `benchmark-r17-r18` workflow on `workflow_dispatch`.
-3. The `cold-zstd-patch` job reliably fails at "Decoding error (36)" after the `_prebuild-pg-prewarm` layer's patch is created and immediately consumed by the chain reconstruction step.
-4. The `cold-zstd` job (same fixture, default zstd compression, no --patch-from) succeeds.
-
-The bug surfaces inside an end-to-end snapshot pipeline; if a more minimal repro is required, the maintainers may need a sample memory dump (1.65 GiB compressed to ~480 MiB by pzstd) that we can share privately on request — the file is a process memory dump and contains keys + buffer data we'd rather not publish on a public release asset.
-
-**Expected behavior**
-
-`zstd -d --patch-from=<ref> <patch> -o <out>` should produce `<out>` byte-identical to the original `<target>` that was fed to the encoder, and the XXH64 checksum embedded in the patch frame should validate.
-
-**Desktop (please complete the following information):**
-- OS: Ubuntu 24.04 LTS (GitHub Actions ubuntu-latest runner; Azure VM, KVM-accel)
-- zstd CLI versions tried: 1.5.5 (apt), 1.5.7 (built from facebook/zstd v1.5.7 tag)
-- Compression flags used: `zstd -q --long=31 --patch-from=<ref> <new> -o <patch>` (default level 3)
-- Decompression flags: `zstd -d --long=31 --patch-from=<ref> <patch> -o <out>`
-- File sizes: reference 1734206607 bytes (1.7 GiB), target same size with ~5 MiB modified region near offset 900 MiB, patch ~6 MiB
-- Reference bytes: verified byte-identical at encode time and decode time via `sha256sum` (`e6b527233120bf21...`)
-
-**Additional context**
-
-Our use case is layered VM live-snapshot deduplication: each snapshot's `memory.bin.zst` (~500 MiB compressed, ~1.65 GiB raw) is encoded as a delta against the immediately-previous layer's full snapshot. Across stacked plugin layers most pages don't change between layers, so the patches average ~5 MiB. On macOS this gives us a ~98 % disk saving per delta layer; on Linux the patch encoder reliably produces unusable patches at this size.
-
-We've experimented with:
-- pzstd (parallel multi-frame) vs zstd (single-frame) for compressing the reference — same failure.
-- pzstd vs zstd for decompressing the reference (separately confirmed reference bytes match) — same failure.
-- Without `--long=31` — encoder errors because reference exceeds default 128 MiB window.
-- `--long=32` — same failure.
-
-**Build-flag bisection of the zstd 1.5.7 source we ship on the failing runner** — each row rebuilds from `v1.5.7` tag, on the same `ubuntu-latest` Azure x86_64 KVM runner, runs the same round-trip:
-
-| Build flags | Result |
-|---|---|
-| `make zstd HAVE_PTHREAD=1` (default) | **FAIL** |
-| `make zstd HAVE_PTHREAD=1 ZSTD_NO_ASM=1` (drops `huf_decompress_amd64.S`) | **FAIL** |
-| `make zstd HAVE_PTHREAD=1 ZSTD_NO_ASM=1`, `CFLAGS="-DZSTD_NO_INTRINSICS"` (drops `_mm_*` + BMI2 C intrinsics) | **FAIL** |
-| `make zstd HAVE_PTHREAD=1 ZSTD_NO_ASM=1`, `CFLAGS="-DZSTD_NO_INTRINSICS -O0 -fno-tree-vectorize"` (also kills compiler auto-vectorization) | **FAIL** |
-
-So the bug is NOT in the hand-written x86_64 asm, NOT in explicit SSE/BMI2 intrinsics, and NOT in compiler-emitted SIMD. The triangulation with TCG (passes) vs native x86_64 KVM (fails) strongly suggests an **uninitialized-memory read** somewhere in the LDM / `--patch-from` code path — TCG tends to zero-initialize while native execution gives whatever was in the allocator's heap; the resulting "garbage" differs, and the encoder's match positions encode the garbage, producing a patch whose decode (on the same machine with re-allocated heap and different garbage) reconstructs different bytes than the original target. Consistent with the failure mode (encoder/decoder reference is byte-identical; patch round-trip is not), with the platform pattern (only x86_64 native; aarch64 native + TCG x86_64 pass), and with the workload sensitivity (synthetic data doesn't reach the buggy code path; specific qemu memory contents do).
-
-We've kept the original `memory.bin.zst` that triggers this and can supply it privately to maintainers if it helps. PATCH_DIAG sha256 diagnostic instrumentation in our wrapper (aq v2.5.38, rlock v0.1.10) confirms encode/decode reference bytes are identical, ruling out compression non-determinism between the two sides.
-
-Happy to test fixes against our pipeline once a candidate lands in `dev` branch.
+- "Sub-flag bisection of the suspect dependency" is wasted effort if the
+  failing call is not isolated end-to-end first. Always reproduce the
+  failure against the **standalone CLI** of the dependency before
+  blaming its internals.
+- Workload-sensitive failures that don't reproduce on synthetic data are
+  more often a sign of bugged orchestration around the data than of a
+  data-shape-sensitive dep.
