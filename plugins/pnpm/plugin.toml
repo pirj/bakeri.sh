@@ -1,6 +1,5 @@
 description = "Install Node.js packages declared in pnpm-lock.yaml via pnpm install"
 protocol_version = "1"
-needs_source = true
 deps = ["mise"]
 host_deps = []
 triggers = ["pnpm-lock.yaml"]

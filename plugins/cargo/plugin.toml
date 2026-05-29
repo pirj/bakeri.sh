@@ -1,6 +1,5 @@
 description = "Fetch Rust crates declared in Cargo.lock via cargo fetch (no compile)"
 protocol_version = "1"
-needs_source = true
 deps = ["mise"]
 host_deps = []
 triggers = ["Cargo.lock"]

@@ -1,6 +1,5 @@
 description = "Build and warm up docker-compose services inside the VM"
 protocol_version = "1"
-needs_source = true
 # Hard dep on `docker-engine` only (we need dockerd inside the VM).
 # `docker-registry-cache` was previously listed here too, but the cache
 # is a pure-optimisation layer — without it, guests pull straight from

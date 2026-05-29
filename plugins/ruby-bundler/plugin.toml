@@ -1,6 +1,5 @@
 description = "Install Ruby gems declared in Gemfile.lock via Bundler"
 protocol_version = "1"
-needs_source = true
 deps = ["mise"]
 host_deps = []
 triggers = ["Gemfile.lock"]
