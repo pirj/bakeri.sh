@@ -141,6 +141,18 @@ if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
     local_triggered=()
     mapfile -t local_triggered < <(detect_triggers "$(pwd)" "${local_available[@]}")
     _profile_mark "after detect_triggers"
+    # F1+F2 — when the snapcompose project is a subdir of a git repo,
+    # `.git` lives at the repo root, not in pwd, so the git plugin's
+    # `.git` trigger doesn't fire in detect_triggers. Force-add it so
+    # the framework's auto-push to `rl-<vm>` is wired up (without git
+    # plugin in chain, cmd_new skips the source-sync hook entirely).
+    if [ -n "$SNAPC_GIT_ROOT" ]; then
+        local has_git=0 _p
+        for _p in "${local_triggered[@]}"; do
+            [ "$_p" = "git" ] && { has_git=1; break; }
+        done
+        [ "$has_git" = "0" ] && local_triggered+=("git")
+    fi
     activate=("${local_triggered[@]}" "${synthesised[@]}")
     if [[ ${#activate[@]} -eq 0 ]]; then
         die "No snapcompose plugins triggered in $(pwd) and no snapcompose.toml [prebuild.*] sections. Need at least one of: Dockerfile, docker-compose.yml, mise.toml, .tool-versions, .ruby-version, .nvmrc — or declare prebuild steps in snapcompose.toml."
