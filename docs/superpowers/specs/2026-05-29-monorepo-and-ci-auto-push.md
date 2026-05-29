@@ -23,7 +23,7 @@ The walking-skeleton attempt hit this on the very first run: `COPY Gemfile Gemfi
 Three coordinated features (treat them as one design):
 
 - **F1 — subdir-as-project**: `snapcompose.toml` may live in a subdirectory of the git repo. When `snapc run` is invoked from `<repo>/services/main/`, every plugin's snapshot_build inside the VM operates in `/home/rlock/repo/services/main/`, not `/home/rlock/repo/`.
-- **F2 — auto-push at cache-miss boundary**: `snapc run` sets up the `rl` git remote automatically (non-interactive) and pushes HEAD into the VM **only when at least one upstream layer that needs source has a cache miss**. Full-warm runs skip the push.
+- **F2 — auto-push at cache-miss boundary**: The framework (`rl new` / `cmd_new`) sets up an `rl-<vm>` git remote automatically (non-interactive, flock-protected) and pushes HEAD into the VM **at most once per `rl new`**. The push fires at one of two points: (a) during chain walking, at the first cache-miss boundary of a non-{`_base`, `git`} plugin — ensures that source-needing snapshot_builds find files; (b) post-walk catch-all — fires on full-warm runs where every snapshot was cache-hit but app-code on host has advanced since the last build (a one-line edit in `app/models/user.rb` invalidates no `snapshot_key`, yet the user expects fresh source).
 - **F3 — drop redundant scp from docker-compose plugin**: once F2 delivers source via git push, the plugin's `aq scp Dockerfile compose .dockerignore` loop is redundant. Replace it with a single `cd "$VM_PROJECT_DIR" && docker compose ...`.
 
 ## Non-goals
@@ -73,41 +73,49 @@ The fallback default preserves backwards compatibility with non-monorepo fixture
 
 ### F2 — auto-push at cache-miss boundary
 
-**Mechanism:**
+**Mechanism.** Implemented entirely in the rlock framework — no plugin metadata needed. The framework knows when it's walking a cache-miss layer; it owns source delivery.
 
-1. **Auto-setup `rl` remote.** In `snapc-run`, after `rl new` provisions the VM, before chain walking enters source-needing layers, check whether the host repo has an `rl` remote pointing at this VM's current SSH endpoint. If not, set it up:
+**1. Helper `git_sync_source_to_vm` in `rlock/lib/util.sh`.** Single function the framework calls. Idempotent and concurrency-safe.
 
-   ```bash
-   port=$(get_ssh_port "$vm_name")  # rlock util
-   remote_url="ssh://rlock@localhost:$port/home/rlock/repo"
-   key_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-   ssh_cmd="ssh $key_opts -p $port"
-   git remote remove rl 2>/dev/null || :
-   git remote add rl "$remote_url"
-   git config --local core.sshCommand "$ssh_cmd"
-   ```
+```bash
+git_sync_source_to_vm() {
+    local vm="$1"
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+    local port
+    port=$(get_ssh_port "$vm" 2>/dev/null) || { warn ...; return 0; }
 
-   For multi-VM monorepo use, the remote name needs to be VM-scoped: `rl-<vm-name>`. The `--vm-suffix=<tag>` form already gives us a VM-scoped name (`<basename>-<tag>`), and `snapc-run` knows it, so the remote is `rl-${vm_name}`. Single-VM use keeps the unsuffixed `rl` for backwards compatibility.
+    local remote_name="rl-$vm"
+    local remote_url="ssh://rlock@localhost:$port/home/rlock/repo"
 
-2. **Decide whether to push.** Before walking the chain, ask each plugin's manifest whether it declares `needs_source = true` (new field in `plugin.toml`, default false). If any such plugin has a cache miss for its current snapshot_key, set `needs_push=1`.
+    # flock the .git/config to serialize concurrent multi-VM remote setup.
+    (
+        flock 9
+        git -C "$git_root" remote remove "$remote_name" 2>/dev/null || :
+        git -C "$git_root" remote add "$remote_name" "$remote_url"
+    ) 9>"$git_root/.git/config.lock"
 
-   Cache miss check uses rlock's existing snapshot cache index — same lookup the chain walker would do anyway. Cheap.
+    info "Pushing HEAD into VM '$vm'..."
+    GIT_SSH_COMMAND="ssh ... -p $port" \
+        git -C "$git_root" push -f "$remote_name" HEAD:refs/heads/main
+}
+```
 
-3. **Push if needed.** If `needs_push=1`, run:
+The VM-scoped remote name (`rl-<vm>`) lets one monorepo's working tree have N parallel remotes — one per microservice VM — without collision.
 
-   ```bash
-   git push -f "rl-$vm_name" "HEAD:refs/heads/_snapc_main"
-   ```
+**2. Walker hook for the first-miss case.** `snapshot_walk_chain` in `rlock/lib/snapshot.sh` exposes a pluggable hook `snapshot_walk_chain_first_miss_hook`. At the start of each miss-path iteration, if the missing plugin is not `_base` or `git` (those plugins build the receiving repo itself — there's nothing to push into yet) and we haven't pushed yet this walk, the walker calls the hook and marks `_SNAPSHOT_FIRST_MISS_DONE=1`.
 
-   The push goes to the VM's bare-ish repo at `/home/rlock/repo` (set up by the `git` plugin's snapshot_build with `receive.denyCurrentBranch updateInstead` so the working tree advances). After push, `/home/rlock/repo` contains the full monorepo HEAD.
+`cmd_new` in `rlock/bin/rl` defines the hook to call `git_sync_source_to_vm` whenever the `git` plugin is in the resolved chain. Other entry points (e.g. a future `rl provision` without git) can leave it undefined; the walker no-ops in that case.
 
-4. **Walk the chain.** Source is in place; cache-miss layers can build.
+**3. Post-walk catch-all in `cmd_new`.** Full-warm runs never enter the miss-path body and so never call the hook. To handle the "app-code changed on host since last build, but no `snapshot_key` invalidated" case, `cmd_new` checks `_SNAPSHOT_FIRST_MISS_DONE` after the walk completes. If still 0 and the git plugin is in the chain, it calls `git_sync_source_to_vm` once more — guaranteeing the running VM always has the host's latest HEAD before user code runs.
 
-**Why "any source-needing miss → push at start" instead of "push exactly between the cached prefix and the first miss":** the simpler model has cost = 1 extra push per cold/partial-warm run (~100 ms – 1 s for typical repos). The precise-boundary model requires the chain walker to interleave snapshot logic with shell-out steps, which is a much bigger refactor for very small win. We can revisit if measurement shows the simpler model is too slow.
+**Net effect: at most one push per `rl new`, always after the last restore/build and before user-visible code execution.** Cold + partial-warm push during the walk (so source-needing builds see fresh files); full-warm push after the walk (so the running VM sees fresh app code).
 
-**Backwards compatibility:** plugins that don't declare `needs_source` default to false. Old fixtures see no behaviour change.
+**`snapc run` against an existing VM.** When the VM already exists, `rl new` doesn't run and the framework path isn't entered. `snapc run` itself calls the same `git_sync_source_to_vm` helper as a separate refresh-on-rerun pass. Same flock semantics, same idempotent remote setup. Old `git push -f rl HEAD:refs/heads/_snapc_run` code path removed.
 
-**`plugin.toml` schema bump:** add optional `needs_source = true|false` field at the top level of `plugin.toml`. Bump `protocol_version` from `"1"` to `"2"` so the framework knows whether to read this field; plugins without it default to false. Older snapcompose readers tolerate unknown fields.
+**No plugin metadata needed.** Earlier drafts of this spec proposed a `needs_source = true|false` field in `plugin.toml` to gate the push per-plugin. Discarded: pushing source into a plugin that doesn't strictly need it costs nothing (the VM's repo just has files no one reads), but having to thread a flag through every dep-installer plugin AND through the walker is a real maintenance tax. Framework owns the policy.
+
+**Backwards compatibility.** Framework-only change. No plugin protocol bump. Pre-v0.3.0 plugins unchanged.
 
 ### F3 — drop redundant scp from docker-compose plugin
 
