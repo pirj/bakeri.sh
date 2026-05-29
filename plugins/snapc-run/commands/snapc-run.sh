@@ -147,11 +147,13 @@ if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
     # the framework's auto-push to `rl-<vm>` is wired up (without git
     # plugin in chain, cmd_new skips the source-sync hook entirely).
     if [ -n "$SNAPC_GIT_ROOT" ]; then
-        local has_git=0 _p
+        # NB: this block runs at script scope, not inside a function —
+        # bash refuses `local` here. Plain assignments.
+        _has_git=0
         for _p in "${local_triggered[@]}"; do
-            [ "$_p" = "git" ] && { has_git=1; break; }
+            [ "$_p" = "git" ] && { _has_git=1; break; }
         done
-        [ "$has_git" = "0" ] && local_triggered+=("git")
+        [ "$_has_git" = "0" ] && local_triggered+=("git")
     fi
     activate=("${local_triggered[@]}" "${synthesised[@]}")
     if [[ ${#activate[@]} -eq 0 ]]; then
