@@ -191,6 +191,19 @@ off the same cached snapshot. Measurement TODO: how much disk does
 this single snapshot occupy and how much time does it save versus a
 cold install? (~30 s install, ~470 MiB snapshot — confirm.)
 
+## Potential performance improvements (2026-05-29 research)
+
+Catalogued from a 4-track research dive. Source: [`../meta/2026-05-29-optimization-research-top10.md`](../meta/2026-05-29-optimization-research-top10.md). Not actively in flight — recorded so we don't re-derive next time we revisit cold/warm latency. Items here are the ones whose natural home is snapcompose (per-plugin cmd, prebuild side, distribution UX); cross-cutting QEMU/aq items live in [`../aq/ROADMAP.md`](../aq/ROADMAP.md) under "Potential performance improvements"; CI/cache items in [`../setup-snapcompose/TODO.md`](../setup-snapcompose/TODO.md); rlock framework items in [`../rlock/TODO.md`](../rlock/TODO.md).
+
+- [ ] **`vmtouch` hot pages into `memory.bin` at snapshot save time** — `apk add vmtouch && vmtouch -t /var/lib/docker/overlay2 /usr/bin/dockerd /usr/lib/postgres*` as a final step of each cold prebuild plugin (or as a snapcompose-wide pre-snapshot hook). Pre-populates the page cache so it's RAM-resident at `qmp migrate` time → included in `memory.bin` → no page fault on first `docker-compose up` after warm restore. Expected: M3 0 ms warm restore itself (the saving is on the FIRST guest request after the VM is up); cuts ~500-1500 ms off first `docker-compose up` post-warm. 1 LoC per plugin or one shared step. Zero risk. [vmtouch](https://github.com/hoytech/vmtouch).
+- [ ] **`eatmydata` LD_PRELOAD for cold prebuild plugins** — turns `fsync`/`fdatasync` into no-ops during `apk add`, `docker pull`, schema migration etc. Cold path is fsync-dominated on Azure block storage (10-50 ms per fsync × hundreds of fsyncs). Expected: M3 cold -5 to -15 s of the 95 s base build; CI cold -20 to -60 s of the 232 s. ~3 LoC: `apk add eatmydata` in `_base`/`docker-engine`, then prefix `apk` / `docker` calls with `eatmydata` in each prebuild plugin. **Caveat**: must `sync` before `aq snapshot create`, otherwise the captured disk state is half-flushed. Add `sync && sleep 0.2` in `snapc-prebuild.sh`'s pre-snapshot hook.
+- [ ] **s6-overlay (or runit) for prebuild VMs only** — Alpine's OpenRC sequential boot is ~1.5-2.5 s from `/sbin/init` to `sshd` accept. s6-overlay (used by many container bases) gets down to ~400-700 ms. Only affects the COLD base build path (warm restore skips init entirely), so the saving is M3 cold -800 to -1500 ms / CI cold -1.5 to -3 s. ~200-400 LoC of Alpine `setup-alpine` customisation. Distro-level change; defer until everything cheaper is shipped.
+- [ ] **`docker-registry-cache` measurement on CI** — already shipped 2026-05-19 (commit 29a75fd) as a snapcompose plugin (CNCF distribution binary in proxy mode on `127.0.0.1:5000`). M3 saves ~60 s on every cold `rl new` after the first on the host. CI numbers unmeasured — the cache restore on a fresh runner may or may not preserve the registry's blob store. Worth a 1-day sprint to bench-confirm and document.
+
+### Explicitly NOT pursuing
+
+- **Devcontainers / VS Code Dev Containers as a snapcompose UX target.** Different threat model (container reuse without VM isolation), different speed profile (much faster, much less isolated). Worth tracking but not converging onto.
+
 ## Consolidate `snapc-run` / `snapc-pr` / `snapc-cache` into one `snapc-cli` plugin
 
 Surfaced by the 2026-05-19 architecture review (Issue 1) — see
