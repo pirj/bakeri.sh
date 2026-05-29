@@ -129,8 +129,13 @@ adventure (untrusted-fork model under discussion in TODO).
   user projects depend on it; bump `protocol_version` and
   document migration if you must.
 - Don't merge a CHANGELOG entry without a benchmark run if the
-  change could affect cold/warm timings. The
-  `../meta/benchmark-*.md` series is the regression detector.
+  change could affect cold/warm/warm-from-patch timings. The
+  snapcompose-benchmark workflow (against the `snapcompose-benchmark`
+  fixture repo) is the regression detector; methodology is in
+  [`docs/bench/2026-05-29-microservices-benchmark.md`](docs/bench/2026-05-29-microservices-benchmark.md)
+  and headline results in [`README.md`](README.md). Performance
+  releases of aq and rlock also trigger this benchmark — see
+  their CLAUDE.md.
 
 ## Sibling repos and dependencies
 
