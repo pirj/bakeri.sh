@@ -1,5 +1,6 @@
 description = "Install Python packages declared in poetry.lock via poetry install"
 protocol_version = "1"
+needs_source = true
 deps = ["mise"]
 host_deps = []
 triggers = ["poetry.lock"]

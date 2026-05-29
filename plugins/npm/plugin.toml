@@ -1,5 +1,6 @@
 description = "Install Node.js packages declared in package-lock.json via npm ci"
 protocol_version = "1"
+needs_source = true
 deps = ["mise"]
 host_deps = []
 triggers = ["package-lock.json"]

@@ -1,5 +1,6 @@
 description = "Install language runtimes declared in mise.toml / .tool-versions / .ruby-version / .nvmrc"
 protocol_version = "1"
+needs_source = true
 deps = []
 host_deps = []
 triggers = ["mise.toml", ".tool-versions", ".ruby-version", ".nvmrc"]
