@@ -149,11 +149,17 @@ if [[ ! -d "$AQ_STATE_DIR/$vm_name" ]]; then
     if [ -n "$SNAPC_GIT_ROOT" ]; then
         # NB: this block runs at script scope, not inside a function —
         # bash refuses `local` here. Plain assignments.
+        # Prepend (not append) so resolve_deps' topological tie-breaking
+        # keeps the git plugin AHEAD of source-needing plugins like
+        # docker-compose / ruby-bundler. If git is resolved AFTER them,
+        # the chain walks docker-compose / bundler before git plugin's
+        # snapshot_build initialises /home/rlock/repo, and the auto-push
+        # has no receiving repo.
         _has_git=0
         for _p in "${local_triggered[@]}"; do
             [ "$_p" = "git" ] && { _has_git=1; break; }
         done
-        [ "$_has_git" = "0" ] && local_triggered+=("git")
+        [ "$_has_git" = "0" ] && local_triggered=("git" "${local_triggered[@]}")
     fi
     activate=("${local_triggered[@]}" "${synthesised[@]}")
     if [[ ${#activate[@]} -eq 0 ]]; then
