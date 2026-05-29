@@ -160,21 +160,16 @@ else
     info "Reusing existing VM '$vm_name'"
 fi
 
-# Push current HEAD via the framework's `rl` git remote. The framework's
-# git plugin set this up during `rl new`. If we're not in a git repo, or
-# the remote isn't there, skip silently — the VM still has the code from
-# the last push.
-if [[ "$NO_PUSH" -eq 0 ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    if git remote get-url rl >/dev/null 2>&1; then
-        info "Pushing HEAD into the VM..."
-        # -f because we may be amending / rebasing between snapc-run calls.
-        # Push to a dedicated bake ref so the user's own branch on the guest
-        # isn't disturbed.
-        _profile_mark "before git push"
-        git push -f rl "HEAD:refs/heads/_snapc_run" >/dev/null 2>&1 \
-            || warn "git push to VM failed — proceeding with whatever code is in the VM"
-        _profile_mark "after git push"
-    fi
+# Refresh HEAD inside the VM on repeat invocations against an existing
+# VM (the `rl new` path's framework auto-push only fires when the VM is
+# (re)provisioned; subsequent snapc runs against a still-warm VM go
+# through this path). The framework sets up `rl-<vm>` automatically;
+# we just call its push helper so the same flock + setup-if-missing
+# semantics are used. If we're not in a git repo, the helper no-ops.
+if [[ "$NO_PUSH" -eq 0 ]]; then
+    _profile_mark "before git push"
+    git_sync_source_to_vm "$vm_name"
+    _profile_mark "after git push"
 fi
 
 # Exec the user command. SSH error code propagates.
