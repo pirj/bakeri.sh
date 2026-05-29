@@ -68,6 +68,30 @@ else
 fi
 [[ -n "$vm_name" ]] || die "Could not determine VM name for the current project."
 
+# F1 — subdir-as-project. If pwd is a subdirectory of a git repo, the
+# project source on the host lives at the git root (a monorepo with N
+# services under e.g. services/<name>/), while THIS snapcompose project
+# is only one subtree. The git plugin clones into /home/rlock/repo
+# inside the VM; we want every dependent plugin (mise, ruby-bundler,
+# docker-compose, etc.) to operate at /home/rlock/repo/<subdir-rel>,
+# not at the repo root.
+#
+# Exported for downstream plugins (snapshot_build runs in our env).
+SNAPC_HOST_PROJECT_ROOT="$(pwd)"
+if SNAPC_GIT_ROOT="$(git -C "$SNAPC_HOST_PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+    SNAPC_SUBPROJECT_REL="$(realpath --relative-to="$SNAPC_GIT_ROOT" "$SNAPC_HOST_PROJECT_ROOT")"
+    [ "$SNAPC_SUBPROJECT_REL" = "." ] && SNAPC_SUBPROJECT_REL=""
+else
+    SNAPC_GIT_ROOT=""
+    SNAPC_SUBPROJECT_REL=""
+fi
+if [ -n "$SNAPC_SUBPROJECT_REL" ]; then
+    SNAPC_VM_PROJECT_DIR="/home/rlock/repo/$SNAPC_SUBPROJECT_REL"
+else
+    SNAPC_VM_PROJECT_DIR="/home/rlock/repo"
+fi
+export SNAPC_VM_PROJECT_DIR SNAPC_SUBPROJECT_REL SNAPC_GIT_ROOT SNAPC_HOST_PROJECT_ROOT
+
 # Synthesise prebuild plugins from snapcompose.toml (if present). The
 # synth dir lives under .snapcompose/plugins/ in the project root. Even
 # if the VM already exists we regenerate — cheap, and it keeps the
